@@ -1,101 +1,36 @@
 #include "SettingsWindow.h"
-#include "resource.h"
-#include "core/Logger.h"
 #include "core/Configuration.h"
+#include "core/Logger.h"
 #include "desktop/MonitorManager.h"
 #include "desktop/DesktopManager.h"
-#include "Application.h"
 
-#include <CommCtrl.h>
-#include <commdlg.h>
-#include <sstream>
+#include <imgui.h>
+#include <imgui_impl_win32.h>
+#include <imgui_impl_dx11.h>
+#include <tchar.h>
+#include <commdlg.h> // For GetOpenFileName
 
-#pragma comment(lib, "comctl32.lib")
+// Forward declare message handler from imgui_impl_win32.cpp
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 namespace PixelMotion {
 
 SettingsWindow::SettingsWindow()
     : m_hwnd(nullptr)
+    , m_visible(false)
     , m_initialized(false)
-    , m_settingsChanged(false)
     , m_config(nullptr)
     , m_monitorManager(nullptr)
-    , m_currentMonitorIndex(0)
+    , m_desktopManager(nullptr)
+    , m_selectedMonitorIndex(0)
+    , m_batteryPause(true)
+    , m_fullscreenPause(true)
 {
+    memset(m_wallpaperPathBuffer, 0, sizeof(m_wallpaperPathBuffer));
 }
 
 SettingsWindow::~SettingsWindow() {
     Shutdown();
-}
-
-bool SettingsWindow::Initialize() {
-    if (m_initialized) {
-        return true;
-    }
-
-    Logger::Info("Initializing settings window...");
-
-    // Initialize common controls
-    INITCOMMONCONTROLSEX icex;
-    icex.dwSize = sizeof(INITCOMMONCONTROLSEX);
-    icex.dwICC = ICC_LISTVIEW_CLASSES | ICC_STANDARD_CLASSES;
-    InitCommonControlsEx(&icex);
-
-    m_initialized = true;
-    return true;
-}
-
-void SettingsWindow::Shutdown() {
-    if (!m_initialized) {
-        return;
-    }
-
-    if (m_hwnd) {
-        DestroyWindow(m_hwnd);
-        m_hwnd = nullptr;
-    }
-
-    m_initialized = false;
-}
-
-void SettingsWindow::Show() {
-    if (!m_initialized) {
-        Logger::Error("SettingsWindow not initialized");
-        return;
-    }
-
-    if (m_hwnd && IsWindow(m_hwnd)) {
-        ShowWindow(m_hwnd, SW_SHOW);
-        SetForegroundWindow(m_hwnd);
-        return;
-    }
-
-    // Create modeless dialog
-    m_hwnd = CreateDialogParam(
-        GetModuleHandle(nullptr),
-        MAKEINTRESOURCE(IDD_SETTINGS_DIALOG),
-        nullptr,
-        DialogProc,
-        reinterpret_cast<LPARAM>(this)
-    );
-
-    if (!m_hwnd) {
-        Logger::Error("Failed to create settings dialog");
-        return;
-    }
-
-    ShowWindow(m_hwnd, SW_SHOW);
-    UpdateWindow(m_hwnd);
-}
-
-void SettingsWindow::Hide() {
-    if (m_hwnd) {
-        ShowWindow(m_hwnd, SW_HIDE);
-    }
-}
-
-bool SettingsWindow::IsVisible() const {
-    return m_hwnd && IsWindowVisible(m_hwnd);
 }
 
 void SettingsWindow::SetConfiguration(Configuration* config) {
@@ -106,394 +41,359 @@ void SettingsWindow::SetMonitorManager(MonitorManager* monitorMgr) {
     m_monitorManager = monitorMgr;
 }
 
-INT_PTR CALLBACK SettingsWindow::DialogProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    SettingsWindow* pThis = nullptr;
+void SettingsWindow::SetDesktopManager(DesktopManager* desktopMgr) {
+    m_desktopManager = desktopMgr;
+}
 
-    if (msg == WM_INITDIALOG) {
-        pThis = reinterpret_cast<SettingsWindow*>(lParam);
-        SetWindowLongPtr(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(pThis));
-        return pThis->OnInitDialog(hwnd);
+void SettingsWindow::Shutdown() {
+    if (m_initialized) {
+        ImGui_ImplDX11_Shutdown();
+        ImGui_ImplWin32_Shutdown();
+        ImGui::DestroyContext();
+        
+        CleanupDX11();
+        
+        if (m_hwnd) {
+            DestroyWindow(m_hwnd);
+            UnregisterClass(_T("PixelMotionSettings"), GetModuleHandle(nullptr));
+            m_hwnd = nullptr;
+        }
+        
+        m_initialized = false;
+    }
+}
+
+bool SettingsWindow::Initialize() {
+    if (m_initialized) return true;
+
+    // Create application window
+    WNDCLASSEX wc = { sizeof(WNDCLASSEX), CS_CLASSDC, SettingsWindow::WindowProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, _T("PixelMotionSettings"), nullptr };
+    RegisterClassEx(&wc);
+    
+    // Calculate center of screen
+    int screenW = GetSystemMetrics(SM_CXSCREEN);
+    int screenH = GetSystemMetrics(SM_CYSCREEN);
+    int winW = 800;
+    int winH = 600;
+    int x = (screenW - winW) / 2;
+    int y = (screenH - winH) / 2;
+
+    m_hwnd = CreateWindow(_T("PixelMotionSettings"), _T("Pixel Motion Settings"), 
+        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX, 
+        x, y, winW, winH, nullptr, nullptr, wc.hInstance, this);
+
+    // Initialize Direct3D
+    if (!InitializeDX11()) {
+        CleanupDX11();
+        UnregisterClass(_T("PixelMotionSettings"), wc.hInstance);
+        return false;
+    }
+
+    // Initialize ImGui
+    if (!InitializeImGui()) {
+        CleanupDX11();
+        UnregisterClass(_T("PixelMotionSettings"), wc.hInstance);
+        return false;
+    }
+
+    m_initialized = true;
+    return true;
+}
+
+bool SettingsWindow::InitializeDX11() {
+    DXGI_SWAP_CHAIN_DESC sd;
+    ZeroMemory(&sd, sizeof(sd));
+    sd.BufferCount = 2;
+    sd.BufferDesc.Width = 0;
+    sd.BufferDesc.Height = 0;
+    sd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    sd.BufferDesc.RefreshRate.Numerator = 60;
+    sd.BufferDesc.RefreshRate.Denominator = 1;
+    sd.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
+    sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    sd.OutputWindow = m_hwnd;
+    sd.SampleDesc.Count = 1;
+    sd.SampleDesc.Quality = 0;
+    sd.Windowed = TRUE;
+    sd.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+
+    UINT createDeviceFlags = 0;
+    D3D_FEATURE_LEVEL featureLevel;
+    const D3D_FEATURE_LEVEL featureLevelArray[2] = { D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_0 };
+    
+    HRESULT hr = D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, createDeviceFlags, featureLevelArray, 2, D3D11_SDK_VERSION, &sd, &m_swapChain, &m_device, &featureLevel, &m_context);
+    if (hr == DXGI_ERROR_UNSUPPORTED) // Try high-performance WARP if hardware not available
+        hr = D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, createDeviceFlags, featureLevelArray, 2, D3D11_SDK_VERSION, &sd, &m_swapChain, &m_device, &featureLevel, &m_context);
+    
+    if (FAILED(hr)) return false;
+
+    // Create Render Target View
+    ID3D11Texture2D* pBackBuffer;
+    m_swapChain->GetBuffer(0, IID_PPV_ARGS(&pBackBuffer));
+    m_device->CreateRenderTargetView(pBackBuffer, nullptr, &m_mainRenderTargetView);
+    pBackBuffer->Release();
+
+    return true;
+}
+
+void SettingsWindow::CleanupDX11() {
+    m_mainRenderTargetView.Reset();
+    m_swapChain.Reset();
+    m_context.Reset();
+    m_device.Reset();
+}
+
+bool SettingsWindow::InitializeImGui() {
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO(); (void)io;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+
+    // Setup Dear ImGui style - Dark Theme with customizations
+    ImGui::StyleColorsDark();
+    
+    // Custom Style
+    ImGuiStyle& style = ImGui::GetStyle();
+    style.WindowRounding = 8.0f;
+    style.FrameRounding = 4.0f;
+    style.GrabRounding = 4.0f;
+    style.Colors[ImGuiCol_WindowBg] = ImVec4(0.12f, 0.12f, 0.14f, 1.00f);
+    style.Colors[ImGuiCol_Header] = ImVec4(0.20f, 0.20f, 0.22f, 1.00f);
+    style.Colors[ImGuiCol_Button] = ImVec4(0.25f, 0.25f, 0.27f, 1.00f);
+    style.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.35f, 0.35f, 0.37f, 1.00f);
+    style.Colors[ImGuiCol_ButtonActive] = ImVec4(0.15f, 0.50f, 0.85f, 1.00f);
+
+    // Setup Platform/Renderer backends
+    ImGui_ImplWin32_Init(m_hwnd);
+    ImGui_ImplDX11_Init(m_device.Get(), m_context.Get());
+
+    return true;
+}
+
+LRESULT CALLBACK SettingsWindow::WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (ImGui_ImplWin32_WndProcHandler(hwnd, msg, wParam, lParam))
+        return true;
+
+    SettingsWindow* window = nullptr;
+    if (msg == WM_NCCREATE) {
+        LPCREATESTRUCT lpcs = (LPCREATESTRUCT)lParam;
+        window = (SettingsWindow*)lpcs->lpCreateParams;
+        SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)window);
     } else {
-        pThis = reinterpret_cast<SettingsWindow*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
+        window = (SettingsWindow*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
     }
 
-    if (!pThis) {
-        return FALSE;
-    }
-
-    switch (msg) {
-        case WM_COMMAND:
-            return pThis->OnCommand(wParam, lParam);
-        case WM_NOTIFY:
-            return pThis->OnNotify(wParam, lParam);
+    if (window) {
+        switch (msg) {
         case WM_CLOSE:
-            return pThis->OnClose();
-        default:
-            return FALSE;
-    }
-}
-
-INT_PTR SettingsWindow::OnInitDialog(HWND hwnd) {
-    m_hwnd = hwnd;
-
-    // Set dialog title
-    SetWindowText(m_hwnd, L"Pixel Motion - Settings");
-
-    // Center the dialog
-    RECT rc;
-    GetWindowRect(m_hwnd, &rc);
-    int width = rc.right - rc.left;
-    int height = rc.bottom - rc.top;
-    int screenWidth = GetSystemMetrics(SM_CXSCREEN);
-    int screenHeight = GetSystemMetrics(SM_CYSCREEN);
-    SetWindowPos(m_hwnd, nullptr,
-        (screenWidth - width) / 2,
-        (screenHeight - height) / 2,
-        0, 0, SWP_NOSIZE | SWP_NOZORDER);
-
-    // Populate monitor list
-    PopulateMonitorList();
-
-    // Load settings for first monitor
-    if (m_monitorManager && m_monitorManager->GetMonitorCount() > 0) {
-        LoadMonitorSettings(0);
-    }
-
-    // Update resource management settings
-    UpdateResourceSettings();
-
-    return TRUE;
-}
-
-INT_PTR SettingsWindow::OnCommand(WPARAM wParam, LPARAM lParam) {
-    int controlId = LOWORD(wParam);
-    int notifyCode = HIWORD(wParam);
-
-    switch (controlId) {
-        case IDC_BROWSE_BUTTON:
-            OnBrowseWallpaper();
-            return TRUE;
-
-        case IDC_SCALING_COMBO:
-            if (notifyCode == CBN_SELCHANGE) {
-                OnScalingChanged();
+            window->Hide(); // Don't destroy, just hide
+            return 0;
+        case WM_SYSCOMMAND:
+            if ((wParam & 0xfff0) == SC_KEYMENU) // Disable ALT application menu
+                return 0;
+            break;
+        case WM_DPICHANGED:
+            if (ImGui::GetIO().ConfigFlags) { // & ImGuiConfigFlags_DpiEnableScaleViewports) {
+                //const RECT* suggested_rect = (RECT*)lParam;
+                //SetWindowPos(hwnd, nullptr, suggested_rect->left, suggested_rect->top, suggested_rect->right - suggested_rect->left, suggested_rect->bottom - suggested_rect->top, SWP_NOZORDER | SWP_NOACTIVATE);
             }
-            return TRUE;
-
-        case IDC_GAMEMODE_CHECK:
-        case IDC_BATTERY_CHECK:
-        case IDC_STARTUP_CHECK:
-            m_settingsChanged = true;
-            UpdateControlStates();
-            return TRUE;
-
-        case IDC_APPLY_BUTTON:
-            OnApply();
-            return TRUE;
-
-        case IDC_CANCEL_BUTTON:
-        case IDCANCEL:
-            OnCancel();
-            return TRUE;
-
-        default:
-            return FALSE;
-    }
-}
-
-INT_PTR SettingsWindow::OnNotify(WPARAM wParam, LPARAM lParam) {
-    LPNMHDR pnmh = reinterpret_cast<LPNMHDR>(lParam);
-
-    if (pnmh->idFrom == IDC_MONITOR_LIST && pnmh->code == LVN_ITEMCHANGED) {
-        LPNMLISTVIEW pnmlv = reinterpret_cast<LPNMLISTVIEW>(lParam);
-        if (pnmlv->uNewState & LVIS_SELECTED) {
-            OnMonitorSelectionChanged();
+            break;
         }
     }
-
-    return FALSE;
-}
-
-INT_PTR SettingsWindow::OnClose() {
-    Hide();
-    return TRUE;
-}
-
-void SettingsWindow::PopulateMonitorList() {
-    HWND hList = GetDlgItem(m_hwnd, IDC_MONITOR_LIST);
-    if (!hList) return;
-
-    // Set up list view columns
-    LVCOLUMN lvc = {};
-    lvc.mask = LVCF_TEXT | LVCF_WIDTH;
-    lvc.cx = 80;
-    lvc.pszText = const_cast<LPWSTR>(L"Monitor");
-    ListView_InsertColumn(hList, 0, &lvc);
-
-    lvc.cx = 150;
-    lvc.pszText = const_cast<LPWSTR>(L"Resolution");
-    ListView_InsertColumn(hList, 1, &lvc);
-
-    lvc.cx = 100;
-    lvc.pszText = const_cast<LPWSTR>(L"Primary");
-    ListView_InsertColumn(hList, 2, &lvc);
-
-    // Populate monitor information
-    if (!m_monitorManager) return;
-
-    int monitorCount = m_monitorManager->GetMonitorCount();
-    m_tempSettings.resize(monitorCount);
-
-    for (int i = 0; i < monitorCount; ++i) {
-        // Get monitor info (placeholder - would come from MonitorManager)
-        std::wstringstream ss;
-        ss << L"Monitor " << (i + 1);
-
-        LVITEM lvi = {};
-        lvi.mask = LVIF_TEXT;
-        lvi.iItem = i;
-        lvi.iSubItem = 0;
-        lvi.pszText = const_cast<LPWSTR>(ss.str().c_str());
-        ListView_InsertItem(hList, &lvi);
-
-        // Resolution (placeholder)
-        ListView_SetItemText(hList, i, 1, const_cast<LPWSTR>(L"1920x1080"));
-
-        // Primary indicator
-        ListView_SetItemText(hList, i, 2, i == 0 ? const_cast<LPWSTR>(L"Yes") : const_cast<LPWSTR>(L"No"));
-    }
-
-    // Select first monitor
-    ListView_SetItemState(hList, 0, LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED);
-}
-
-void SettingsWindow::UpdateWallpaperPath() {
-    if (m_currentMonitorIndex < 0 || m_currentMonitorIndex >= static_cast<int>(m_tempSettings.size())) {
-        return;
-    }
-
-    HWND hEdit = GetDlgItem(m_hwnd, IDC_WALLPAPER_PATH);
-    if (hEdit) {
-        SetWindowText(hEdit, m_tempSettings[m_currentMonitorIndex].wallpaperPath.c_str());
-    }
-}
-
-void SettingsWindow::UpdateScalingMode() {
-    if (m_currentMonitorIndex < 0 || m_currentMonitorIndex >= static_cast<int>(m_tempSettings.size())) {
-        return;
-    }
-
-    HWND hCombo = GetDlgItem(m_hwnd, IDC_SCALING_COMBO);
-    if (hCombo) {
-        SendMessage(hCombo, CB_SETCURSEL, m_tempSettings[m_currentMonitorIndex].scalingMode, 0);
-    }
-}
-
-void SettingsWindow::UpdateResourceSettings() {
-    if (!m_config) return;
-
-    // Game Mode checkbox
-    HWND hGameMode = GetDlgItem(m_hwnd, IDC_GAMEMODE_CHECK);
-    if (hGameMode) {
-        SendMessage(hGameMode, BM_SETCHECK, m_config->GetGameModeEnabled() ? BST_CHECKED : BST_UNCHECKED, 0);
-    }
-
-    // Battery-Aware checkbox
-    HWND hBattery = GetDlgItem(m_hwnd, IDC_BATTERY_CHECK);
-    if (hBattery) {
-        SendMessage(hBattery, BM_SETCHECK, m_config->GetBatteryAwareEnabled() ? BST_CHECKED : BST_UNCHECKED, 0);
-    }
-
-    // Startup checkbox
-    HWND hStartup = GetDlgItem(m_hwnd, IDC_STARTUP_CHECK);
-    if (hStartup) {
-        SendMessage(hStartup, BM_SETCHECK, m_config->GetStartWithWindows() ? BST_CHECKED : BST_UNCHECKED, 0);
-    }
-
-    UpdateControlStates();
-}
-
-void SettingsWindow::UpdateControlStates() {
-    // Enable/disable battery threshold based on Battery-Aware checkbox
-    HWND hBatteryCheck = GetDlgItem(m_hwnd, IDC_BATTERY_CHECK);
-    HWND hThreshold = GetDlgItem(m_hwnd, IDC_BATTERY_THRESHOLD);
     
-    if (hBatteryCheck && hThreshold) {
-        BOOL enabled = (SendMessage(hBatteryCheck, BM_GETCHECK, 0, 0) == BST_CHECKED);
-        EnableWindow(hThreshold, enabled);
-    }
-
-    // Enable Apply button if settings changed
-    HWND hApply = GetDlgItem(m_hwnd, IDC_APPLY_BUTTON);
-    if (hApply) {
-        EnableWindow(hApply, m_settingsChanged);
-    }
+    return DefWindowProc(hwnd, msg, wParam, lParam);
 }
 
-void SettingsWindow::OnMonitorSelectionChanged() {
-    int newIndex = GetSelectedMonitorIndex();
-    if (newIndex < 0) return;
-
-    // Save current monitor settings before switching
-    SaveCurrentMonitorSettings();
-
-    // Load new monitor settings
-    m_currentMonitorIndex = newIndex;
-    LoadMonitorSettings(newIndex);
-}
-
-void SettingsWindow::OnBrowseWallpaper() {
-    std::wstring filePath = OpenFileDialog();
-    if (filePath.empty()) return;
-
-    // Update current monitor's wallpaper path
-    if (m_currentMonitorIndex >= 0 && m_currentMonitorIndex < static_cast<int>(m_tempSettings.size())) {
-        m_tempSettings[m_currentMonitorIndex].wallpaperPath = filePath;
-        UpdateWallpaperPath();
-        m_settingsChanged = true;
-        UpdateControlStates();
+void SettingsWindow::Show() {
+    if (!m_initialized) Initialize();
+    ShowWindow(m_hwnd, SW_SHOW);
+    UpdateWindow(m_hwnd);
+    m_visible = true;
+    
+    // Refresh monitor list on show
+    if (m_monitorManager) {
+        m_monitorManager->Update();
     }
 }
 
-void SettingsWindow::OnScalingChanged() {
-    HWND hCombo = GetDlgItem(m_hwnd, IDC_SCALING_COMBO);
-    if (!hCombo) return;
-
-    int selection = static_cast<int>(SendMessage(hCombo, CB_GETCURSEL, 0, 0));
-    if (selection != CB_ERR && m_currentMonitorIndex >= 0 && m_currentMonitorIndex < static_cast<int>(m_tempSettings.size())) {
-        m_tempSettings[m_currentMonitorIndex].scalingMode = selection;
-        m_settingsChanged = true;
-        UpdateControlStates();
-    }
+void SettingsWindow::Hide() {
+    ShowWindow(m_hwnd, SW_HIDE);
+    m_visible = false;
 }
 
-void SettingsWindow::OnApply() {
-    if (!m_config) return;
+bool SettingsWindow::IsVisible() const {
+    return m_visible;
+}
 
-    // Save current monitor settings
-    SaveCurrentMonitorSettings();
+void SettingsWindow::Render() {
+    if (!m_visible) return;
 
-    // Apply all monitor settings to configuration
-    for (size_t i = 0; i < m_tempSettings.size(); ++i) {
-        // TODO: Save to configuration
-        Logger::Info("Applying settings for monitor " + std::to_string(i));
+    // Handle window resize (DX11 swapchain resize) if needed
+    // For now we assume fixed size or handled by DX11 init logic if we added resize handler
+
+    // Start the Dear ImGui frame
+    ImGui_ImplDX11_NewFrame();
+    ImGui_ImplWin32_NewFrame();
+    ImGui::NewFrame();
+
+    // Create the UI
+    DrawUI();
+
+    // Rendering
+    ImGui::Render();
+    const float clear_color_with_alpha[4] = { 0.12f, 0.12f, 0.14f, 1.00f };
+    m_context->OMSetRenderTargets(1, m_mainRenderTargetView.GetAddressOf(), nullptr);
+    m_context->ClearRenderTargetView(m_mainRenderTargetView.Get(), clear_color_with_alpha);
+    ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+    m_swapChain->Present(1, 0); // Enable VSync
+}
+
+void SettingsWindow::DrawUI() {
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(viewport->WorkPos);
+    ImGui::SetNextWindowSize(viewport->WorkSize);
+
+    ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings;
+    
+    if (ImGui::Begin("Settings", nullptr, window_flags)) {
         
-        // Load wallpaper if path is set
-        if (!m_tempSettings[i].wallpaperPath.empty()) {
-            // Get Application instance to access DesktopManager
-            auto* desktopMgr = Application::GetInstance().GetDesktopManager();
-            if (desktopMgr) {
-                if (desktopMgr->SetWallpaper(static_cast<int>(i), m_tempSettings[i].wallpaperPath)) {
-                    std::wstring wPath = m_tempSettings[i].wallpaperPath;
-                    std::string path(wPath.begin(), wPath.end());
-                    Logger::Info("Loaded wallpaper: " + path);
-                } else {
-                    Logger::Error("Failed to load wallpaper for monitor " + std::to_string(i));
+        // Split into two panels: Monitor List (Left) and Settings (Right)
+        ImGui::Columns(2, "SettingsColumns", true);
+        
+        // --- Left Panel: Monitors ---
+        ImGui::Text("Displays");
+        ImGui::Separator();
+        
+        if (m_monitorManager) {
+            int monitorCount = m_monitorManager->GetMonitorCount();
+            
+            // Sync monitor list if needed (simplified)
+            m_monitorIds.resize(monitorCount);
+            
+            for (int i = 0; i < monitorCount; i++) {
+                char label[32];
+                sprintf_s(label, "Monitor %d", i + 1);
+                
+                if (ImGui::Selectable(label, m_selectedMonitorIndex == i)) {
+                    m_selectedMonitorIndex = i;
+                    LoadSettingsForMonitor(i);
                 }
             }
         }
+        
+        ImGui::NextColumn();
+        
+        // --- Right Panel: Settings ---
+        if (m_monitorManager && m_selectedMonitorIndex >= 0 && m_selectedMonitorIndex < m_monitorManager->GetMonitorCount()) {
+            ImGui::Text("Wallpaper Settings");
+            ImGui::Separator();
+            
+            ImGui::Spacing();
+            ImGui::Text("File Path:");
+            ImGui::InputText("##WallpaperPath", m_wallpaperPathBuffer, MAX_PATH, ImGuiInputTextFlags_ReadOnly);
+            ImGui::SameLine();
+            if (ImGui::Button("Browse...")) {
+                std::wstring path = OpenFileDialog();
+                if (!path.empty()) {
+                   WideCharToMultiByte(CP_UTF8, 0, path.c_str(), -1, m_wallpaperPathBuffer, MAX_PATH, nullptr, nullptr);
+                   // Auto-apply on selection? Or wait for Apply button?
+                   // ApplySettings(); 
+                }
+            }
+            
+            ImGui::Spacing();
+            // Scaling Mode (Placeholder)
+            const char* items[] = { "Fill", "Fit", "Stretch", "Center" };
+            static int item_current = 0; // TODO: Load from config
+            ImGui::Combo("Scaling", &item_current, items, IM_ARRAYSIZE(items));
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Text("Performance");
+            ImGui::Checkbox("Pause on Battery Power", &m_batteryPause);
+            ImGui::Checkbox("Pause when Fullscreen App Detected", &m_fullscreenPause);
+            
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+            
+            if (ImGui::Button("Apply", ImVec2(120, 0))) {
+                ApplySettings();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Close", ImVec2(120, 0))) {
+                Hide();
+            }
+            
+        } else {
+            ImGui::Text("No monitor selected or detected.");
+        }
+        
+        ImGui::End();
     }
-
-    // Apply resource management settings
-    HWND hGameMode = GetDlgItem(m_hwnd, IDC_GAMEMODE_CHECK);
-    if (hGameMode) {
-        bool enabled = (SendMessage(hGameMode, BM_GETCHECK, 0, 0) == BST_CHECKED);
-        m_config->SetGameModeEnabled(enabled);
-    }
-
-    HWND hBattery = GetDlgItem(m_hwnd, IDC_BATTERY_CHECK);
-    if (hBattery) {
-        bool enabled = (SendMessage(hBattery, BM_GETCHECK, 0, 0) == BST_CHECKED);
-        m_config->SetBatteryAwareEnabled(enabled);
-    }
-
-    HWND hStartup = GetDlgItem(m_hwnd, IDC_STARTUP_CHECK);
-    if (hStartup) {
-        bool enabled = (SendMessage(hStartup, BM_GETCHECK, 0, 0) == BST_CHECKED);
-        m_config->SetStartWithWindows(enabled);
-    }
-
-    // Save configuration
-    m_config->Save();
-
-    m_settingsChanged = false;
-    UpdateControlStates();
-
-    SetDlgItemText(m_hwnd, IDC_STATUS_TEXT, L"Settings applied successfully!");
-    Logger::Info("Settings applied");
 }
 
-void SettingsWindow::OnCancel() {
-    // Reload settings from configuration (discard changes)
+void SettingsWindow::LoadSettingsForMonitor(int monitorIndex) {
+    if (!m_monitorManager) return;
+    auto* monitor = m_monitorManager->GetMonitor(monitorIndex);
+    if (!monitor) return;
+    
+    // Clear buffer default
+    m_wallpaperPathBuffer[0] = '\0';
+
+    // Load from global configuration
     if (m_config) {
-        UpdateResourceSettings();
+        const auto& settings = m_config->GetSettings();
+        auto it = settings.monitors.find(monitor->deviceName);
+        if (it != settings.monitors.end()) {
+            std::wstring wpath = it->second.wallpaperPath;
+            WideCharToMultiByte(CP_UTF8, 0, wpath.c_str(), -1, m_wallpaperPathBuffer, MAX_PATH, nullptr, nullptr);
+            
+            // TODO: Load scaling mode
+            // m_scalingMode = it->second.scalingMode;
+        }
     }
+}
 
-    if (m_monitorManager && m_monitorManager->GetMonitorCount() > 0) {
-        LoadMonitorSettings(m_currentMonitorIndex);
+void SettingsWindow::ApplySettings() {
+    if (!m_monitorManager) return;
+    
+    // Convert UTF-8 buffer to wstring
+    wchar_t wPath[MAX_PATH];
+    MultiByteToWideChar(CP_UTF8, 0, m_wallpaperPathBuffer, -1, wPath, MAX_PATH);
+    
+    // Apply to current monitor
+    if (m_desktopManager) {
+        m_desktopManager->SetWallpaper(m_selectedMonitorIndex, wPath);
     }
-
-    m_settingsChanged = false;
-    UpdateControlStates();
-    Hide();
+    
+    // TODO: Apply resource settings to Config/ResourceManager
+    
+    // Check if user has no wallpaper set
+    if (wcslen(wPath) > 0) {
+        // Maybe save to config file here
+    }
 }
 
 std::wstring SettingsWindow::OpenFileDialog() {
-    OPENFILENAME ofn = {};
-    wchar_t szFile[MAX_PATH] = {};
+    OPENFILENAME ofn;
+    wchar_t szFile[MAX_PATH] = { 0 };
 
-    ofn.lStructSize = sizeof(OPENFILENAME);
-    ofn.hwndOwner = m_hwnd;
+    ZeroMemory(&ofn, sizeof(ofn));
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = m_hwnd; // Modal to settings window
     ofn.lpstrFile = szFile;
-    ofn.nMaxFile = MAX_PATH;
-    ofn.lpstrFilter = L"Video Files\0*.mp4;*.mkv;*.avi;*.mov;*.webm\0Image Files\0*.jpg;*.jpeg;*.png;*.bmp;*.gif\0All Files\0*.*\0";
+    ofn.nMaxFile = sizeof(szFile);
+    ofn.lpstrFilter = L"Media Files\0*.mp4;*.mkv;*.avi;*.mov;*.wmv;*.jpg;*.jpeg;*.png;*.bmp\0All Files\0*.*\0";
     ofn.nFilterIndex = 1;
-    ofn.lpstrTitle = L"Select Wallpaper File";
-    ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY;
+    ofn.lpstrFileTitle = nullptr;
+    ofn.nMaxFileTitle = 0;
+    ofn.lpstrInitialDir = nullptr;
+    ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
 
     if (GetOpenFileName(&ofn)) {
-        return std::wstring(szFile);
+        return std::wstring(ofn.lpstrFile);
     }
-
-    return L"";
+    return std::wstring();
 }
-
-int SettingsWindow::GetSelectedMonitorIndex() {
-    HWND hList = GetDlgItem(m_hwnd, IDC_MONITOR_LIST);
-    if (!hList) return -1;
-
-    return ListView_GetNextItem(hList, -1, LVNI_SELECTED);
-}
-
-void SettingsWindow::SaveCurrentMonitorSettings() {
-    if (m_currentMonitorIndex < 0 || m_currentMonitorIndex >= static_cast<int>(m_tempSettings.size())) {
-        return;
-    }
-
-    // Wallpaper path is already saved in m_tempSettings when changed
-    // Scaling mode is already saved in m_tempSettings when changed
-}
-
-void SettingsWindow::LoadMonitorSettings(int monitorIndex) {
-    if (monitorIndex < 0 || monitorIndex >= static_cast<int>(m_tempSettings.size())) {
-        return;
-    }
-
-    m_currentMonitorIndex = monitorIndex;
-
-    // Update UI with monitor's settings
-    UpdateWallpaperPath();
-    UpdateScalingMode();
-
-    // Populate scaling combo if not already done
-    HWND hCombo = GetDlgItem(m_hwnd, IDC_SCALING_COMBO);
-    if (hCombo && SendMessage(hCombo, CB_GETCOUNT, 0, 0) == 0) {
-        SendMessage(hCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Fill"));
-        SendMessage(hCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Fit"));
-        SendMessage(hCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Stretch"));
-        SendMessage(hCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Center"));
-        SendMessage(hCombo, CB_SETCURSEL, 0, 0);
-    }
-}
-
 } // namespace PixelMotion

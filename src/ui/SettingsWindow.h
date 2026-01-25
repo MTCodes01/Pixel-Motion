@@ -1,19 +1,22 @@
 #pragma once
 
 #include <Windows.h>
-#include <CommCtrl.h>
+#include <d3d11.h>
+#include <wrl/client.h>
 #include <string>
 #include <vector>
 #include <memory>
+
+using Microsoft::WRL::ComPtr;
 
 namespace PixelMotion {
 
 class Configuration;
 class MonitorManager;
+class DesktopManager;
 
 /**
- * Settings dialog window
- * Provides UI for configuring wallpapers, monitors, and resource management
+ * Modern ImGui-based Settings Window
  */
 class SettingsWindow {
 public:
@@ -22,60 +25,55 @@ public:
 
     bool Initialize();
     void Shutdown();
+    
     void Show();
     void Hide();
     bool IsVisible() const;
+    
+    void Render(); // Called every frame when visible
 
     void SetConfiguration(Configuration* config);
     void SetMonitorManager(MonitorManager* monitorMgr);
+    void SetDesktopManager(DesktopManager* desktopMgr);
+
+    // Window Procedure
+    static LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 private:
-    // Dialog procedure
-    static INT_PTR CALLBACK DialogProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
+    bool InitializeDX11();
+    bool InitializeImGui();
+    void CleanupDX11();
     
-    // Message handlers
-    INT_PTR OnInitDialog(HWND hwnd);
-    INT_PTR OnCommand(WPARAM wParam, LPARAM lParam);
-    INT_PTR OnNotify(WPARAM wParam, LPARAM lParam);
-    INT_PTR OnClose();
+    void DrawUI(); // Draw ImGui widgets
+    void ApplySettings(); // Save and apply changes
+    void LoadSettingsForMonitor(int monitorIndex);
     
-    // UI update methods
-    void PopulateMonitorList();
-    void UpdateWallpaperPath();
-    void UpdateScalingMode();
-    void UpdateResourceSettings();
-    void UpdateControlStates();
-    
-    // Event handlers
-    void OnMonitorSelectionChanged();
-    void OnBrowseWallpaper();
-    void OnScalingChanged();
-    void OnApply();
-    void OnCancel();
-    
-    // Helper methods
+    // Windows helpers
     std::wstring OpenFileDialog();
-    int GetSelectedMonitorIndex();
-    void SaveCurrentMonitorSettings();
-    void LoadMonitorSettings(int monitorIndex);
-    
+
+private:
     HWND m_hwnd;
+    bool m_visible;
     bool m_initialized;
-    bool m_settingsChanged;
     
-    // References to application components
+    // Dependencies
     Configuration* m_config;
     MonitorManager* m_monitorManager;
+    DesktopManager* m_desktopManager;
     
-    // Current selection
-    int m_currentMonitorIndex;
+    // DX11 Resources
+    ComPtr<ID3D11Device> m_device;
+    ComPtr<ID3D11DeviceContext> m_context;
+    ComPtr<IDXGISwapChain> m_swapChain;
+    ComPtr<ID3D11RenderTargetView> m_mainRenderTargetView;
     
-    // Temporary settings (before Apply)
-    struct MonitorSettings {
-        std::wstring wallpaperPath;
-        int scalingMode; // 0=Fill, 1=Fit, 2=Stretch, 3=Center
-    };
-    std::vector<MonitorSettings> m_tempSettings;
+    // UI State
+    int m_selectedMonitorIndex;
+    char m_wallpaperPathBuffer[MAX_PATH];
+    const char* m_monitorNames[10]; // Simplified for now
+    std::vector<std::string> m_monitorIds;
+    bool m_batteryPause;
+    bool m_fullscreenPause;
 };
 
 } // namespace PixelMotion

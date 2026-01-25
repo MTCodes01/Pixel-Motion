@@ -30,6 +30,9 @@ pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET
     libswresample
 )
 
+# Find ImGui
+find_package(imgui CONFIG REQUIRED)
+
 # DirectX 11 libraries (Windows SDK)
 set(DX11_LIBRARIES
     d3d11.lib
@@ -109,6 +112,7 @@ target_include_directories(PixelMotion PRIVATE
 # Link libraries
 target_link_libraries(PixelMotion PRIVATE
     PkgConfig::FFMPEG
+    imgui::imgui
     ${DX11_LIBRARIES}
     ${WIN_LIBRARIES}
 )

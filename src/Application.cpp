@@ -103,6 +103,7 @@ bool Application::InitializeSubsystems() {
     // Connect settings window to configuration and monitor manager
     m_settingsWindow->SetConfiguration(m_config.get());
     m_settingsWindow->SetMonitorManager(m_monitorManager.get());
+    m_settingsWindow->SetDesktopManager(m_desktopManager.get());
     Logger::Info("All subsystems connected successfully");
 
     return true;
@@ -161,6 +162,11 @@ void Application::Render() {
     // Render is handled by individual monitor renderers in DesktopManager
     if (m_desktopManager && !m_resourceManager->IsPaused()) {
         m_desktopManager->Render();
+    }
+    
+    // Render settings window (ImGui)
+    if (m_settingsWindow) {
+        m_settingsWindow->Render();
     }
 }
 
