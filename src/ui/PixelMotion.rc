@@ -1,0 +1,40 @@
+#include "resource.h"
+#include <windows.h>
+
+// Dialog resource
+IDD_SETTINGS_DIALOG DIALOGEX 0, 0, 480, 400
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Pixel Motion - Settings"
+FONT 9, "Segoe UI"
+BEGIN
+    // Monitor Selection Group
+    GROUPBOX        "Monitors", IDC_STATIC, 10, 10, 460, 120
+    CONTROL         "", IDC_MONITOR_LIST, "SysListView32", LVS_REPORT | LVS_SINGLESEL | WS_BORDER | WS_TABSTOP, 20, 25, 440, 95
+    
+    // Wallpaper Configuration Group
+    GROUPBOX        "Wallpaper", IDC_STATIC, 10, 140, 460, 80
+    LTEXT           "File Path:", IDC_STATIC, 20, 160, 60, 12
+    EDITTEXT        IDC_WALLPAPER_PATH, 85, 158, 300, 14, ES_AUTOHSCROLL | ES_READONLY
+    PUSHBUTTON      "Browse...", IDC_BROWSE_BUTTON, 395, 157, 65, 16
+    
+    LTEXT           "Scaling:", IDC_STATIC, 20, 185, 60, 12
+    COMBOBOX        IDC_SCALING_COMBO, 85, 183, 120, 60, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    
+    // Resource Management Group
+    GROUPBOX        "Resource Management", IDC_STATIC, 10, 230, 460, 80
+    CONTROL         "Enable Game Mode (pause during fullscreen apps)", IDC_GAMEMODE_CHECK, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 20, 248, 250, 12
+    CONTROL         "Enable Battery-Aware Mode", IDC_BATTERY_CHECK, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 20, 268, 150, 12
+    LTEXT           "Battery threshold (%):", IDC_STATIC, 40, 288, 100, 12
+    EDITTEXT        IDC_BATTERY_THRESHOLD, 145, 286, 40, 14, ES_NUMBER
+    
+    // General Settings Group
+    GROUPBOX        "General", IDC_STATIC, 10, 320, 460, 40
+    CONTROL         "Start with Windows", IDC_STARTUP_CHECK, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 20, 338, 150, 12
+    
+    // Status Text
+    LTEXT           "", IDC_STATUS_TEXT, 10, 370, 460, 12, SS_CENTER
+    
+    // Buttons
+    DEFPUSHBUTTON   "Apply", IDC_APPLY_BUTTON, 310, 380, 75, 16
+    PUSHBUTTON      "Cancel", IDC_CANCEL_BUTTON, 395, 380, 75, 16
+END
