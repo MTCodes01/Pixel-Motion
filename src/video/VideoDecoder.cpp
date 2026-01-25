@@ -190,15 +190,12 @@ bool VideoDecoder::InitializeDecoder(ID3D11Device* device) {
     
     // Find decoder
     AVCodecID codecId = videoStream->codecpar->codec_id;
-    Logger::Info("Looking for decoder for codec ID: " + std::to_string(static_cast<int>(codecId)));
     
     const AVCodec* codec = avcodec_find_decoder(codecId);
     if (!codec) {
         Logger::Error("Unsupported codec ID: " + std::to_string(static_cast<int>(codecId)));
         return false;
     }
-    
-    Logger::Info("Found decoder: " + std::string(codec->name));
 
     // Allocate codec context
     m_codecContext = avcodec_alloc_context3(codec);

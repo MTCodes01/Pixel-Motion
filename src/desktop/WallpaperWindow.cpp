@@ -271,11 +271,6 @@ void WallpaperWindow::Render() {
         int arrayIndex = m_videoDecoder->GetFrameArrayIndex();
         if (frameTexture) {
             m_renderer->SetVideoTexture(frameTexture, arrayIndex);
-            
-            static int frameCount = 0;
-            if (frameCount++ % 60 == 0) { // Log every 60 frames
-                Logger::Info("Rendering video frame " + std::to_string(frameCount));
-            }
         }
     }
 

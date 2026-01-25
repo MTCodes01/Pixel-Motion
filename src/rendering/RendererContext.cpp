@@ -313,15 +313,6 @@ void RendererContext::SetVideoTexture(ID3D11Texture2D* texture, int arrayIndex) 
     // Get texture description
     D3D11_TEXTURE2D_DESC texDesc;
     texture->GetDesc(&texDesc);
-    
-    static bool formatLogged = false;
-    if (!formatLogged) {
-        Logger::Info("Video texture format: " + std::to_string(texDesc.Format) + 
-                     ", size: " + std::to_string(texDesc.Width) + "x" + std::to_string(texDesc.Height) +
-                     ", arraySize: " + std::to_string(texDesc.ArraySize) + 
-                     ", arrayIndex: " + std::to_string(arrayIndex));
-        formatLogged = true;
-    }
 
     auto* device = DX11Device::GetInstance().GetDevice();
     auto* context = DX11Device::GetInstance().GetContext();
