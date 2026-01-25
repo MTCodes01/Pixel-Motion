@@ -10,6 +10,7 @@ extern "C" {
 #include <libavutil/hwcontext.h>
 #include <libavutil/hwcontext_d3d11va.h>
 #include <libavutil/imgutils.h>
+#include <libswscale/swscale.h>
 }
 
 namespace PixelMotion {
@@ -20,6 +21,10 @@ VideoDecoder::VideoDecoder()
     , m_frame(nullptr)
     , m_packet(nullptr)
     , m_hwDeviceCtx(nullptr)
+    , m_swsContext(nullptr)
+    , m_rgbaFrame(nullptr)
+    , m_device(nullptr)
+    , m_textureUploaded(false)
     , m_width(0)
     , m_height(0)
     , m_duration(0.0)
@@ -79,6 +84,15 @@ void VideoDecoder::Shutdown() {
         av_frame_free(&m_frame);
     }
 
+    if (m_rgbaFrame) {
+        av_frame_free(&m_rgbaFrame);
+    }
+
+    if (m_swsContext) {
+        sws_freeContext(m_swsContext);
+        m_swsContext = nullptr;
+    }
+
     if (m_codecContext) {
         avcodec_free_context(&m_codecContext);
     }
@@ -91,6 +105,8 @@ void VideoDecoder::Shutdown() {
         av_buffer_unref(&m_hwDeviceCtx);
     }
 
+    m_softwareTexture.Reset();
+    m_device = nullptr;
     m_initialized = false;
 }
 
@@ -139,25 +155,28 @@ bool VideoDecoder::FindVideoStream() {
 
     AVStream* videoStream = m_formatContext->streams[m_videoStreamIndex];
     
-    // Find decoder to get codec ID for image detection
-    const AVCodec* codec = avcodec_find_decoder(videoStream->codecpar->codec_id);
-    if (!codec) {
-        Logger::Error("Unsupported codec for video stream");
-        return false;
-    }
-
+    // Get basic video info
     m_width = videoStream->codecpar->width;
     m_height = videoStream->codecpar->height;
     m_frameRate = av_q2d(videoStream->avg_frame_rate);
     
-    // Detect if this is an image file (single frame)
+    // Detect if this is an image file based on codec ID
     // Image codecs: MJPEG, PNG, BMP, etc.
-    if (codec->id == AV_CODEC_ID_MJPEG || codec->id == AV_CODEC_ID_PNG || 
-        codec->id == AV_CODEC_ID_BMP || codec->id == AV_CODEC_ID_TIFF ||
-        codec->id == AV_CODEC_ID_WEBP || codec->id == AV_CODEC_ID_JPEG2000 ||
+    AVCodecID codecId = videoStream->codecpar->codec_id;
+    if (codecId == AV_CODEC_ID_MJPEG || codecId == AV_CODEC_ID_PNG || 
+        codecId == AV_CODEC_ID_BMP || codecId == AV_CODEC_ID_TIFF ||
+        codecId == AV_CODEC_ID_WEBP || codecId == AV_CODEC_ID_JPEG2000 ||
+        codecId == AV_CODEC_ID_GIF ||
         videoStream->nb_frames == 1 || m_duration < 0.1) {
         m_isImage = true;
-        Logger::Info("Detected image file: " + std::to_string(m_width) + "x" + std::to_string(m_height));
+        
+        // For some image formats, dimensions might be 0 until we decode
+        // We'll get the actual dimensions after decoding the first frame
+        if (m_width == 0 || m_height == 0) {
+            Logger::Info("Image dimensions not in header, will get from decoded frame");
+        } else {
+            Logger::Info("Detected image file: " + std::to_string(m_width) + "x" + std::to_string(m_height));
+        }
     } else {
         Logger::Info("Video stream found: " + std::to_string(m_width) + "x" + 
                      std::to_string(m_height) + " @ " + std::to_string(m_frameRate) + " fps");
@@ -170,11 +189,16 @@ bool VideoDecoder::InitializeDecoder(ID3D11Device* device) {
     AVStream* videoStream = m_formatContext->streams[m_videoStreamIndex];
     
     // Find decoder
-    const AVCodec* codec = avcodec_find_decoder(videoStream->codecpar->codec_id);
+    AVCodecID codecId = videoStream->codecpar->codec_id;
+    Logger::Info("Looking for decoder for codec ID: " + std::to_string(static_cast<int>(codecId)));
+    
+    const AVCodec* codec = avcodec_find_decoder(codecId);
     if (!codec) {
-        Logger::Error("Unsupported codec");
+        Logger::Error("Unsupported codec ID: " + std::to_string(static_cast<int>(codecId)));
         return false;
     }
+    
+    Logger::Info("Found decoder: " + std::string(codec->name));
 
     // Allocate codec context
     m_codecContext = avcodec_alloc_context3(codec);
@@ -189,22 +213,27 @@ bool VideoDecoder::InitializeDecoder(ID3D11Device* device) {
         return false;
     }
 
-    // Setup hardware acceleration
-    if (device && !SetupHardwareAcceleration(device)) {
-        Logger::Warning("Hardware acceleration setup failed, falling back to software decoding");
-    }
-
-    // Set pixel format callback to prefer hardware formats
-    m_codecContext->get_format = [](AVCodecContext* ctx, const enum AVPixelFormat* pix_fmts) -> enum AVPixelFormat {
-        const enum AVPixelFormat* p;
-        for (p = pix_fmts; *p != AV_PIX_FMT_NONE; p++) {
-            if (*p == AV_PIX_FMT_D3D11) {
-                return *p;
-            }
+    // For images, skip hardware acceleration (not supported)
+    // For videos, try to use hardware acceleration
+    if (!m_isImage && device) {
+        if (!SetupHardwareAcceleration(device)) {
+            Logger::Warning("Hardware acceleration setup failed, falling back to software decoding");
         }
-        // Fallback to first available format
-        return pix_fmts[0];
-    };
+        
+        // Set pixel format callback to prefer hardware formats for videos
+        m_codecContext->get_format = [](AVCodecContext* ctx, const enum AVPixelFormat* pix_fmts) -> enum AVPixelFormat {
+            const enum AVPixelFormat* p;
+            for (p = pix_fmts; *p != AV_PIX_FMT_NONE; p++) {
+                if (*p == AV_PIX_FMT_D3D11) {
+                    return *p;
+                }
+            }
+            // Fallback to first available format
+            return pix_fmts[0];
+        };
+    } else if (m_isImage) {
+        Logger::Info("Image file - using software decoding");
+    }
 
     // Open codec
     if (avcodec_open2(m_codecContext, codec, nullptr) < 0) {
@@ -220,6 +249,9 @@ bool VideoDecoder::InitializeDecoder(ID3D11Device* device) {
         Logger::Error("Could not allocate frame or packet");
         return false;
     }
+
+    // Store device for software texture upload
+    m_device = device;
 
     Logger::Info("Decoder initialized successfully");
     return true;
@@ -285,7 +317,9 @@ bool VideoDecoder::DecodeNextFrame() {
         av_packet_unref(m_packet);
 
         if (ret < 0) {
-            Logger::Error("Error sending packet to decoder");
+            char errbuf[AV_ERROR_MAX_STRING_SIZE];
+            av_strerror(ret, errbuf, AV_ERROR_MAX_STRING_SIZE);
+            Logger::Error("Error sending packet to decoder: " + std::string(errbuf) + " (" + std::to_string(ret) + ")");
             return false;
         }
 
@@ -296,11 +330,21 @@ bool VideoDecoder::DecodeNextFrame() {
             // Need more packets
             continue;
         } else if (ret < 0) {
-            Logger::Error("Error receiving frame from decoder");
+            char errbuf[AV_ERROR_MAX_STRING_SIZE];
+            av_strerror(ret, errbuf, AV_ERROR_MAX_STRING_SIZE);
+            Logger::Error("Error receiving frame from decoder: " + std::string(errbuf));
             return false;
         }
 
         // Successfully decoded a frame
+        // For images with 0x0 dimensions, get actual size from decoded frame
+        if (m_isImage && (m_width == 0 || m_height == 0)) {
+            m_width = m_frame->width;
+            m_height = m_frame->height;
+            Logger::Info("Got image dimensions from frame: " + std::to_string(m_width) + "x" + std::to_string(m_height));
+        }
+        
+        m_textureUploaded = false; // New frame needs upload
         return true;
     }
 }
@@ -315,27 +359,84 @@ ID3D11Texture2D* VideoDecoder::GetFrameTexture() {
         return reinterpret_cast<ID3D11Texture2D*>(m_frame->data[0]);
     }
 
-    // Software decoding - need to upload frame data to GPU texture
-    // This is a fallback when hardware acceleration isn't available
-    
-    // For software frames, we need to:
-    // 1. Create a staging texture if we don't have one
-    // 2. Copy frame data to staging texture
-    // 3. Return the texture
-    
-    // Note: This is a simplified implementation
-    // A full implementation would handle format conversion (YUV->RGB)
-    // For now, we'll just log and return nullptr
-    // The proper solution is to ensure hardware decoding works
-    
-    static bool warningShown = false;
-    if (!warningShown) {
-        Logger::Warning("Software decoded frame - texture upload not fully implemented");
-        Logger::Warning("Please ensure your GPU supports D3D11VA for this video codec");
-        warningShown = true;
+    // Software decoding - need to convert and upload frame data to GPU texture
+    if (!m_device) {
+        static bool warned = false;
+        if (!warned) {
+            Logger::Warning("No D3D11 device available for software frame upload");
+            warned = true;
+        }
+        return nullptr;
     }
-    
-    return nullptr;
+
+    // Create or update software texture if needed
+    if (!m_softwareTexture) {
+        D3D11_TEXTURE2D_DESC texDesc = {};
+        texDesc.Width = m_frame->width;
+        texDesc.Height = m_frame->height;
+        texDesc.MipLevels = 1;
+        texDesc.ArraySize = 1;
+        texDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+        texDesc.SampleDesc.Count = 1;
+        texDesc.Usage = D3D11_USAGE_DYNAMIC;
+        texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        texDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+        HRESULT hr = m_device->CreateTexture2D(&texDesc, nullptr, &m_softwareTexture);
+        if (FAILED(hr)) {
+            Logger::Error("Failed to create software texture: " + std::to_string(hr));
+            return nullptr;
+        }
+        Logger::Info("Created software upload texture: " + std::to_string(m_frame->width) + "x" + std::to_string(m_frame->height));
+        m_textureUploaded = false; // Force upload for new texture
+    }
+
+    // If texture is already uploaded, just return it (optimization for static images)
+    if (m_textureUploaded) {
+        return m_softwareTexture.Get();
+    }
+
+    // Set up swscale context if needed (convert any format to BGRA)
+    if (!m_swsContext) {
+        m_swsContext = sws_getContext(
+            m_frame->width, m_frame->height, (AVPixelFormat)m_frame->format,
+            m_frame->width, m_frame->height, AV_PIX_FMT_BGRA,
+            SWS_BILINEAR, nullptr, nullptr, nullptr
+        );
+        if (!m_swsContext) {
+            Logger::Error("Failed to create swscale context");
+            return nullptr;
+        }
+        Logger::Info("Created swscale context for format " + std::to_string(m_frame->format) + " -> BGRA");
+    }
+
+    // Map the texture for writing
+    ID3D11DeviceContext* context = nullptr;
+    m_device->GetImmediateContext(&context);
+    if (!context) {
+        return nullptr;
+    }
+
+    D3D11_MAPPED_SUBRESOURCE mapped;
+    HRESULT hr = context->Map(m_softwareTexture.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+    if (FAILED(hr)) {
+        context->Release();
+        Logger::Error("Failed to map texture: " + std::to_string(hr));
+        return nullptr;
+    }
+
+    // Convert frame to BGRA and write directly to mapped texture
+    uint8_t* dstData[1] = { (uint8_t*)mapped.pData };
+    int dstLinesize[1] = { (int)mapped.RowPitch };
+
+    sws_scale(m_swsContext, m_frame->data, m_frame->linesize, 
+              0, m_frame->height, dstData, dstLinesize);
+
+    context->Unmap(m_softwareTexture.Get(), 0);
+    context->Release();
+
+    m_textureUploaded = true;
+    return m_softwareTexture.Get();
 }
 
 int VideoDecoder::GetFrameArrayIndex() {

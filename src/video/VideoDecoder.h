@@ -2,8 +2,11 @@
 
 #include <Windows.h>
 #include <d3d11.h>
+#include <wrl/client.h>
 #include <string>
 #include <memory>
+
+using Microsoft::WRL::ComPtr;
 
 // Forward declarations for FFmpeg types
 struct AVFormatContext;
@@ -11,6 +14,7 @@ struct AVCodecContext;
 struct AVFrame;
 struct AVPacket;
 struct AVBufferRef;
+struct SwsContext;
 
 namespace PixelMotion {
 
@@ -53,6 +57,13 @@ private:
     AVFrame* m_frame;
     AVPacket* m_packet;
     AVBufferRef* m_hwDeviceCtx;
+    
+    // Software frame upload
+    struct SwsContext* m_swsContext;
+    AVFrame* m_rgbaFrame;
+    ComPtr<ID3D11Texture2D> m_softwareTexture;
+    ID3D11Device* m_device;
+    bool m_textureUploaded;
 
     int m_width;
     int m_height;

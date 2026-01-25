@@ -326,6 +326,33 @@ void RendererContext::SetVideoTexture(ID3D11Texture2D* texture, int arrayIndex) 
     auto* device = DX11Device::GetInstance().GetDevice();
     auto* context = DX11Device::GetInstance().GetContext();
 
+    // Check format - if BGRA/RGBA, use directly
+    if (texDesc.Format == DXGI_FORMAT_B8G8R8A8_UNORM || 
+        texDesc.Format == DXGI_FORMAT_R8G8B8A8_UNORM) {
+        
+        m_videoTexture = texture;
+        
+        // Create SRV directly on the input texture
+        D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+        srvDesc.Format = texDesc.Format;
+        srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+        srvDesc.Texture2D.MipLevels = 1;
+        srvDesc.Texture2D.MostDetailedMip = 0;
+        
+        HRESULT hr = device->CreateShaderResourceView(texture, &srvDesc, &m_videoSRV);
+        if (FAILED(hr)) {
+            Logger::Error("Failed to create SRV for RGBA texture: " + std::to_string(hr));
+        }
+        return;
+    }
+    
+    // Only continue with D3D11VA/Video Processor conversion for NV12
+    if (texDesc.Format != DXGI_FORMAT_NV12) {
+        // Fallback or unknown format
+        Logger::Warning("Unexpected texture format in SetVideoTexture: " + std::to_string(texDesc.Format));
+        return;
+    }
+
     // Static variables to cache video processing resources
     static ComPtr<ID3D11Texture2D> s_rgbaTexture;
     static ComPtr<ID3D11ShaderResourceView> s_rgbaSRV;
