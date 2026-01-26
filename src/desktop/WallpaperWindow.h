@@ -34,6 +34,10 @@ public:
     HWND GetHandle() const { return m_hwnd; }
     const MonitorInfo& GetMonitor() const { return m_monitor; }
     bool HasVideo() const { return m_videoDecoder != nullptr; }
+    
+    // Optimization methods
+    bool NeedsRepaint() const { return m_needsRepaint; }
+    double GetTimeToNextFrame() const;
 
 private:
     static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -48,6 +52,7 @@ private:
     // Video playback timing
     std::chrono::steady_clock::time_point m_lastFrameTime;
     double m_frameInterval; // Time between frames in seconds
+    bool m_needsRepaint;
 
     static const wchar_t* s_className;
     static bool s_classRegistered;

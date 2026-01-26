@@ -183,10 +183,25 @@ void DesktopManager::Update() {
     }
 }
 
+double DesktopManager::GetTimeToNextUpdate() const {
+    double minTime = 1.0; // Default max wait
+    
+    for (const auto& window : m_wallpaperWindows) {
+        double t = window->GetTimeToNextFrame();
+        if (t < minTime) {
+            minTime = t;
+        }
+    }
+    
+    return minTime;
+}
+
 void DesktopManager::Render() {
     // Render each wallpaper window
     for (auto& window : m_wallpaperWindows) {
-        window->Render();
+        if (window->NeedsRepaint()) {
+            window->Render();
+        }
     }
 }
 

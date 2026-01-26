@@ -71,7 +71,6 @@ set(RENDERING_SOURCES
 
 set(VIDEO_SOURCES
     src/video/VideoDecoder.cpp
-    src/video/FrameQueue.cpp
     src/video/AudioPlayer.cpp
 )
 

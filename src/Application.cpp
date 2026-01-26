@@ -145,8 +145,29 @@ int Application::Run() {
         // Render wallpapers
         Render();
 
-        // Yield to prevent 100% CPU usage
-        Sleep(1);
+        // Calculate sleep time
+        // Default to fairly responsive 16ms (60fps) if nothing reported
+        // But if Wallpaper monitors report 33ms or 200ms, use that.
+        // Also check if settings window is open - if so, need responsive UI (16ms)
+        
+        double waitSeconds = 0.033; // Default 30 FPS
+        
+        if (m_desktopManager) {
+            waitSeconds = m_desktopManager->GetTimeToNextUpdate();
+        }
+        
+        // If settings visible, force at least 60 FPS for UI
+        if (m_settingsWindow && m_settingsWindow->IsVisible()) {
+            if (waitSeconds > 0.016) waitSeconds = 0.016;
+        }
+
+        // Convert to milliseconds and clamp
+        // Minimum Sleep(1) to yield, max Sleep(100) to check messages
+        int sleepMs = static_cast<int>(waitSeconds * 1000.0);
+        if (sleepMs < 1) sleepMs = 1;
+        if (sleepMs > 100) sleepMs = 100;
+
+        Sleep(sleepMs);
     }
 
     Logger::Info("Exiting main loop");

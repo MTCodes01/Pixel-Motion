@@ -12,6 +12,7 @@ WallpaperWindow::WallpaperWindow()
     : m_hwnd(nullptr)
     , m_parent(nullptr)
     , m_frameInterval(1.0 / 30.0) // Default 30 FPS
+    , m_needsRepaint(false)
 {
     m_lastFrameTime = std::chrono::steady_clock::now();
 }
@@ -255,9 +256,22 @@ void WallpaperWindow::Update() {
                 m_videoDecoder->DecodeNextFrame();
             }
         }
-
+        
         m_lastFrameTime = now;
+        m_needsRepaint = true;
     }
+}
+
+double WallpaperWindow::GetTimeToNextFrame() const {
+    if (!m_videoDecoder || m_videoDecoder->IsImage()) {
+        return 1.0; // Static content, check infrequently
+    }
+    
+    auto now = std::chrono::steady_clock::now();
+    std::chrono::duration<double> elapsed = now - m_lastFrameTime;
+    double remaining = m_frameInterval - elapsed.count();
+    
+    return (remaining > 0.0) ? remaining : 0.0;
 }
 
 void WallpaperWindow::Render() {
@@ -276,6 +290,7 @@ void WallpaperWindow::Render() {
 
     m_renderer->Render();
     m_renderer->Present(); // Display the frame
+    m_needsRepaint = false;
 }
 
 void WallpaperWindow::SetScalingMode(int mode) {

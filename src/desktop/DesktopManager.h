@@ -26,6 +26,7 @@ public:
 
     void Update();
     void Render();
+    double GetTimeToNextUpdate() const;
 
     void SetConfiguration(class Configuration* config) { m_config = config; }
 
