@@ -43,6 +43,12 @@ bool ResourceManager::Initialize() {
     return true;
 }
 
+void ResourceManager::SetProcessBlocklist(const std::vector<std::string>& list) {
+    if (m_gameModeDetector) {
+        m_gameModeDetector->SetProcessBlocklist(list);
+    }
+}
+
 void ResourceManager::Shutdown() {
     if (!m_initialized) {
         return;

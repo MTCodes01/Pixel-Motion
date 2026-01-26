@@ -37,22 +37,47 @@ void GameModeDetector::Update() {
     // Get foreground window
     HWND foregroundWindow = GetForegroundWindow();
     
-    // Check if it changed
-    if (foregroundWindow != m_lastForegroundWindow) {
-        m_lastForegroundWindow = foregroundWindow;
-        
-        // Check if it's fullscreen
-        bool wasFullscreen = m_fullscreenDetected;
-        m_fullscreenDetected = IsWindowFullscreen(foregroundWindow);
-        
-        if (m_fullscreenDetected != wasFullscreen) {
-            if (m_fullscreenDetected) {
-                Logger::Info("Fullscreen application detected");
-            } else {
-                Logger::Info("Fullscreen application closed");
+    // Check if it changed or every few frames (simple check is fast)
+    // We check every update to be responsive
+    
+    bool isBlocked = false;
+    
+    // Check process blocklist first
+    if (!m_processBlocklist.empty() && foregroundWindow) {
+        std::string processName = GetProcessName(foregroundWindow);
+        if (!processName.empty()) {
+            for (const auto& blocked : m_processBlocklist) {
+                // Check if current process name contains blocked string (uncase sensitive ideally, but exact for now)
+                // Using simple containment or equality
+                if (_stricmp(processName.c_str(), blocked.c_str()) == 0) {
+                    isBlocked = true;
+                    // Logger::Info("Blocked process detected: " + processName);
+                    break;
+                }
             }
         }
     }
+    
+    // Check fullscreen if not already blocked
+    bool isFullscreen = false;
+    if (!isBlocked) {
+        isFullscreen = IsWindowFullscreen(foregroundWindow);
+    }
+    
+    // Update state state
+    bool newState = isBlocked || isFullscreen;
+    
+    if (m_fullscreenDetected != newState) {
+        m_fullscreenDetected = newState;
+        if (m_fullscreenDetected) {
+            if (isBlocked) Logger::Info("Game Mode active (Blocklist match)");
+            else Logger::Info("Game Mode active (Fullscreen detected)");
+        } else {
+            Logger::Info("Game Mode deactivated");
+        }
+    }
+    
+    m_lastForegroundWindow = foregroundWindow;
 }
 
 bool GameModeDetector::IsWindowFullscreen(HWND hwnd) {
@@ -116,6 +141,24 @@ bool GameModeDetector::IsWindowFullscreen(HWND hwnd) {
     // Consider it fullscreen if it covers the monitor and has appropriate styles
     // Relaxed check: just covering monitor + popup OR no caption is usually enough
     return coversMonitor && (hasPopupStyle || noCaption || isTopmost);
+}
+
+std::string GameModeDetector::GetProcessName(HWND hwnd) {
+    if (!hwnd) return "";
+
+    DWORD processId;
+    GetWindowThreadProcessId(hwnd, &processId);
+    
+    HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, processId);
+    if (hProcess) {
+        char buffer[MAX_PATH];
+        if (GetModuleBaseNameA(hProcess, nullptr, buffer, MAX_PATH)) {
+            CloseHandle(hProcess);
+            return std::string(buffer);
+        }
+        CloseHandle(hProcess);
+    }
+    return "";
 }
 
 } // namespace PixelMotion

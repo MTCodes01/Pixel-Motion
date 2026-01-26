@@ -46,6 +46,7 @@ set(WIN_LIBRARIES
     winmm.lib
     comctl32.lib
     shell32.lib
+    psapi.lib
 )
 
 # Source files

@@ -75,6 +75,9 @@ private:
     bool m_batteryPause;
     bool m_fullscreenPause;
     int m_scalingMode;
+    
+    std::vector<std::string> m_blockedApps;
+    int m_selectedAppIndex;
 };
 
 } // namespace PixelMotion

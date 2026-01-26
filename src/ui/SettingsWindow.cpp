@@ -26,6 +26,7 @@ SettingsWindow::SettingsWindow()
     , m_batteryPause(true)
     , m_fullscreenPause(true)
     , m_scalingMode(0)
+    , m_selectedAppIndex(-1)
 {
     memset(m_wallpaperPathBuffer, 0, sizeof(m_wallpaperPathBuffer));
 }

@@ -1,6 +1,9 @@
 #pragma once
 
 #include <Windows.h>
+#include <string>
+#include <vector>
+#include <Psapi.h>
 
 namespace PixelMotion {
 
@@ -19,13 +22,18 @@ public:
     void Update();
 
     bool IsFullscreenAppActive() const { return m_fullscreenDetected; }
+    
+    void SetProcessBlocklist(const std::vector<std::string>& blocklist) { m_processBlocklist = blocklist; }
 
 private:
     bool IsWindowFullscreen(HWND hwnd);
+    std::string GetProcessName(HWND hwnd); // Helper for internal use
 
     bool m_fullscreenDetected;
     HWND m_lastForegroundWindow;
     bool m_initialized;
+    
+    std::vector<std::string> m_processBlocklist;
 };
 
 } // namespace PixelMotion
