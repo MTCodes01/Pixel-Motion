@@ -75,8 +75,6 @@ private:
     bool m_batteryPause;
     bool m_fullscreenPause;
     int m_scalingMode;
-    bool m_loopEnabled;
-    float m_volume;
 };
 
 } // namespace PixelMotion

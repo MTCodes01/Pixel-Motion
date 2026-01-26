@@ -15,8 +15,6 @@ public:
     struct MonitorConfig {
         std::wstring wallpaperPath;
         bool enabled = true;
-        bool loop = true;
-        float volume = 0.5f;
         int scalingMode = 0; // 0=Fill, 1=Fit, 2=Stretch, 3=Tile
     };
 

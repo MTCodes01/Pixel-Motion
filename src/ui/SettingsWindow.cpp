@@ -26,8 +26,6 @@ SettingsWindow::SettingsWindow()
     , m_batteryPause(true)
     , m_fullscreenPause(true)
     , m_scalingMode(0)
-    , m_loopEnabled(true)
-    , m_volume(0.5f)
 {
     memset(m_wallpaperPathBuffer, 0, sizeof(m_wallpaperPathBuffer));
 }
@@ -310,12 +308,6 @@ void SettingsWindow::DrawUI() {
             ImGui::Combo("Scaling", &m_scalingMode, items, IM_ARRAYSIZE(items));
 
             ImGui::Spacing();
-            ImGui::Checkbox("Loop Video", &m_loopEnabled);
-            
-            ImGui::Spacing();
-            ImGui::SliderFloat("Volume", &m_volume, 0.0f, 1.0f, "%.2f");
-
-            ImGui::Spacing();
             ImGui::Separator();
             ImGui::Text("Performance");
             ImGui::Checkbox("Pause on Battery Power", &m_batteryPause);
@@ -349,8 +341,6 @@ void SettingsWindow::LoadSettingsForMonitor(int monitorIndex) {
     // Clear buffer default
     m_wallpaperPathBuffer[0] = '\0';
     m_scalingMode = 0;
-    m_loopEnabled = true;
-    m_volume = 0.5f;
 
     // Load from global configuration
     if (m_config) {
@@ -361,8 +351,6 @@ void SettingsWindow::LoadSettingsForMonitor(int monitorIndex) {
             WideCharToMultiByte(CP_UTF8, 0, wpath.c_str(), -1, m_wallpaperPathBuffer, MAX_PATH, nullptr, nullptr);
             
             m_scalingMode = it->second.scalingMode;
-            m_loopEnabled = it->second.loop;
-            m_volume = it->second.volume;
         }
         
         // Load global settings
@@ -386,8 +374,6 @@ void SettingsWindow::ApplySettings() {
     config.wallpaperPath = wPath;
     config.enabled = true;
     config.scalingMode = m_scalingMode;
-    config.loop = m_loopEnabled;
-    config.volume = m_volume;
     
     // Save to configuration
     m_config->SetMonitorConfig(monitor->deviceName, config);

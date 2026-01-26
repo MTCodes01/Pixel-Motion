@@ -80,12 +80,6 @@ bool Configuration::Load() {
                 if (value.contains("enabled")) {
                     config.enabled = value["enabled"].get<bool>();
                 }
-                if (value.contains("loop")) {
-                    config.loop = value["loop"].get<bool>();
-                }
-                if (value.contains("volume")) {
-                    config.volume = value["volume"].get<float>();
-                }
                 if (value.contains("scalingMode")) {
                     config.scalingMode = value["scalingMode"].get<int>();
                 }
@@ -147,8 +141,6 @@ bool Configuration::Save() {
             }
             
             monitorJson["enabled"] = config.enabled;
-            monitorJson["loop"] = config.loop;
-            monitorJson["volume"] = config.volume;
             monitorJson["scalingMode"] = config.scalingMode;
             
             // Convert device name to UTF-8 for JSON key
