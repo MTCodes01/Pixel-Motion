@@ -27,6 +27,8 @@ public:
     void Update();
     void Render();
 
+    void SetConfiguration(class Configuration* config) { m_config = config; }
+
 private:
     bool FindWorkerW();
     bool CreateWallpaperWindows();
@@ -38,6 +40,7 @@ private:
     HWND m_workerW;
     
     std::vector<std::unique_ptr<WallpaperWindow>> m_wallpaperWindows;
+    class Configuration* m_config;
     bool m_initialized;
 };
 

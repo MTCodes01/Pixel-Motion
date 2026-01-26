@@ -2,6 +2,7 @@
 #include "WallpaperWindow.h"
 #include "MonitorInfo.h"
 #include "core/Logger.h"
+#include "core/Configuration.h"
 
 #include <algorithm>
 
@@ -13,6 +14,7 @@ constexpr UINT WM_SPAWN_WORKER = 0x052C;
 DesktopManager::DesktopManager()
     : m_progman(nullptr)
     , m_workerW(nullptr)
+    , m_config(nullptr)
     , m_initialized(false)
 {
 }
@@ -147,7 +149,20 @@ bool DesktopManager::SetWallpaper(int monitorIndex, const std::wstring& videoPat
     std::string path(wPath.begin(), wPath.end());
     Logger::Info("Setting wallpaper for monitor " + std::to_string(monitorIndex) + ": " + path);
 
-    return m_wallpaperWindows[monitorIndex]->LoadVideo(videoPath);
+    auto* window = m_wallpaperWindows[monitorIndex].get();
+    
+    // Get scaling mode from configuration
+    if (m_config) {
+        const auto& monitor = window->GetMonitor();
+        auto* monitorConfig = m_config->GetMonitorConfig(monitor.deviceName);
+        if (monitorConfig) {
+            int scalingMode = monitorConfig->scalingMode;
+            window->SetScalingMode(scalingMode);
+            Logger::Info("Applied scaling mode: " + std::to_string(scalingMode));
+        }
+    }
+
+    return window->LoadVideo(videoPath);
 }
 
 void DesktopManager::Update() {

@@ -270,12 +270,18 @@ void WallpaperWindow::Render() {
         ID3D11Texture2D* frameTexture = m_videoDecoder->GetFrameTexture();
         int arrayIndex = m_videoDecoder->GetFrameArrayIndex();
         if (frameTexture) {
-            m_renderer->SetVideoTexture(frameTexture, arrayIndex);
+            m_renderer->SetVideoTexture(frameTexture, arrayIndex, m_videoDecoder->GetWidth(), m_videoDecoder->GetHeight());
         }
     }
 
     m_renderer->Render();
     m_renderer->Present(); // Display the frame
+}
+
+void WallpaperWindow::SetScalingMode(int mode) {
+    if (m_renderer) {
+        m_renderer->SetScalingMode(mode);
+    }
 }
 
 } // namespace PixelMotion

@@ -27,7 +27,8 @@ public:
     void Render();
     void Present();
 
-    void SetVideoTexture(ID3D11Texture2D* texture, int arrayIndex = 0);
+    void SetVideoTexture(ID3D11Texture2D* texture, int arrayIndex = 0, int contentWidth = 0, int contentHeight = 0);
+    void SetScalingMode(int mode); // 0=Fill, 1=Fit, 2=Stretch, 3=Center
     ID3D11Device* GetDevice();
 
 private:
@@ -35,6 +36,7 @@ private:
     bool CreateRenderTarget();
     bool LoadShaders();
     bool CreateVertexBuffer();
+    void UpdateVertexBuffer(); // Recalculate vertices based on scaling mode
 
     HWND m_hwnd;
     int m_width;
@@ -51,6 +53,10 @@ private:
 
     ComPtr<ID3D11Texture2D> m_videoTexture;
     ComPtr<ID3D11ShaderResourceView> m_videoSRV;
+
+    int m_scalingMode; // 0=Fill, 1=Fit, 2=Stretch, 3=Center
+    int m_videoWidth;
+    int m_videoHeight;
 
     bool m_initialized;
 };

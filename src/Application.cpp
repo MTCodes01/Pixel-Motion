@@ -105,6 +105,9 @@ bool Application::InitializeSubsystems() {
     m_settingsWindow->SetMonitorManager(m_monitorManager.get());
     m_settingsWindow->SetDesktopManager(m_desktopManager.get());
     
+    // Connect desktop manager to configuration for scaling modes
+    m_desktopManager->SetConfiguration(m_config.get());
+    
     // Connect tray icon to resource manager for pause/resume
     m_trayIcon->SetResourceManager(m_resourceManager.get());
     
