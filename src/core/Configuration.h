@@ -50,6 +50,10 @@ public:
     int GetBatteryThreshold() const { return m_settings.batteryThreshold; }
     void SetBatteryThreshold(int threshold) { m_settings.batteryThreshold = threshold; }
 
+    // Monitor-specific configuration
+    MonitorConfig* GetMonitorConfig(const std::wstring& deviceName);
+    void SetMonitorConfig(const std::wstring& deviceName, const MonitorConfig& config);
+
 
 private:
     std::filesystem::path GetConfigPath() const;

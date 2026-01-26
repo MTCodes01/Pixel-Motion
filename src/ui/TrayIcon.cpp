@@ -1,6 +1,7 @@
 #include "TrayIcon.h"
 #include "Application.h"
 #include "core/Logger.h"
+#include "resources/ResourceManager.h"
 
 #include <shellapi.h>
 
@@ -14,6 +15,8 @@ const UINT TrayIcon::CMD_EXIT;
 TrayIcon::TrayIcon()
     : m_hwnd(nullptr)
     , m_initialized(false)
+    , m_resourceManager(nullptr)
+    , m_paused(false)
 {
     ZeroMemory(&m_nid, sizeof(m_nid));
 }
@@ -120,7 +123,11 @@ void TrayIcon::ShowContextMenu() {
     GetCursorPos(&pt);
 
     HMENU hMenu = CreatePopupMenu();
-    AppendMenu(hMenu, MF_STRING, CMD_PAUSE, L"Pause/Resume");
+    
+    // Dynamic menu text based on pause state
+    const wchar_t* pauseText = m_paused ? L"Resume" : L"Pause";
+    AppendMenu(hMenu, MF_STRING, CMD_PAUSE, pauseText);
+    
     AppendMenu(hMenu, MF_STRING, CMD_SETTINGS, L"Settings...");
     AppendMenu(hMenu, MF_SEPARATOR, 0, nullptr);
     AppendMenu(hMenu, MF_STRING, CMD_EXIT, L"Exit");
@@ -134,8 +141,22 @@ void TrayIcon::ShowContextMenu() {
 void TrayIcon::OnCommand(UINT command) {
     switch (command) {
         case CMD_PAUSE:
-            Logger::Info("Pause/Resume clicked");
-            // TODO: Implement pause/resume
+            if (m_resourceManager) {
+                m_paused = !m_paused;
+                m_resourceManager->SetPaused(m_paused);
+                
+                if (m_paused) {
+                    Logger::Info("Wallpapers paused by user");
+                    ShowNotification(L"Pixel Motion", L"Wallpapers paused");
+                } else {
+                    Logger::Info("Wallpapers resumed by user");
+                    ShowNotification(L"Pixel Motion", L"Wallpapers resumed");
+                }
+                
+                UpdateIcon();
+            } else {
+                Logger::Warning("ResourceManager not set - cannot pause/resume");
+            }
             break;
 
         case CMD_SETTINGS:

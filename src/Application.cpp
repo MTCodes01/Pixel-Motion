@@ -104,6 +104,10 @@ bool Application::InitializeSubsystems() {
     m_settingsWindow->SetConfiguration(m_config.get());
     m_settingsWindow->SetMonitorManager(m_monitorManager.get());
     m_settingsWindow->SetDesktopManager(m_desktopManager.get());
+    
+    // Connect tray icon to resource manager for pause/resume
+    m_trayIcon->SetResourceManager(m_resourceManager.get());
+    
     Logger::Info("All subsystems connected successfully");
 
     return true;

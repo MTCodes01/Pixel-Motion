@@ -6,7 +6,13 @@ FrameQueue::FrameQueue() {
 }
 
 FrameQueue::~FrameQueue() {
-    // TODO: Clean up remaining frames
+    // Clean up remaining frames
+    while (!m_queue.empty()) {
+        void* frame = m_queue.front();
+        m_queue.pop();
+        // Note: Caller is responsible for proper frame deallocation
+        // This just empties the queue to prevent dangling pointers
+    }
 }
 
 void FrameQueue::Push(void* frame) {

@@ -7,6 +7,7 @@ namespace PixelMotion {
 
 ResourceManager::ResourceManager()
     : m_paused(false)
+    , m_manualPause(false)
     , m_fpsMultiplier(1.0f)
     , m_initialized(false)
 {
@@ -70,6 +71,13 @@ void ResourceManager::Update() {
 
 void ResourceManager::UpdatePauseState() {
     bool wasPaused = m_paused;
+
+    // Manual pause takes precedence
+    if (m_manualPause) {
+        m_paused = true;
+        m_fpsMultiplier = 0.0f;
+        return;
+    }
 
     // Pause if fullscreen game detected
     if (m_gameModeDetector->IsFullscreenAppActive()) {

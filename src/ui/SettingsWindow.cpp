@@ -25,6 +25,9 @@ SettingsWindow::SettingsWindow()
     , m_selectedMonitorIndex(0)
     , m_batteryPause(true)
     , m_fullscreenPause(true)
+    , m_scalingMode(0)
+    , m_loopEnabled(true)
+    , m_volume(0.5f)
 {
     memset(m_wallpaperPathBuffer, 0, sizeof(m_wallpaperPathBuffer));
 }
@@ -302,10 +305,15 @@ void SettingsWindow::DrawUI() {
             }
             
             ImGui::Spacing();
-            // Scaling Mode (Placeholder)
+            // Scaling Mode
             const char* items[] = { "Fill", "Fit", "Stretch", "Center" };
-            static int item_current = 0; // TODO: Load from config
-            ImGui::Combo("Scaling", &item_current, items, IM_ARRAYSIZE(items));
+            ImGui::Combo("Scaling", &m_scalingMode, items, IM_ARRAYSIZE(items));
+
+            ImGui::Spacing();
+            ImGui::Checkbox("Loop Video", &m_loopEnabled);
+            
+            ImGui::Spacing();
+            ImGui::SliderFloat("Volume", &m_volume, 0.0f, 1.0f, "%.2f");
 
             ImGui::Spacing();
             ImGui::Separator();
@@ -340,6 +348,9 @@ void SettingsWindow::LoadSettingsForMonitor(int monitorIndex) {
     
     // Clear buffer default
     m_wallpaperPathBuffer[0] = '\0';
+    m_scalingMode = 0;
+    m_loopEnabled = true;
+    m_volume = 0.5f;
 
     // Load from global configuration
     if (m_config) {
@@ -349,29 +360,53 @@ void SettingsWindow::LoadSettingsForMonitor(int monitorIndex) {
             std::wstring wpath = it->second.wallpaperPath;
             WideCharToMultiByte(CP_UTF8, 0, wpath.c_str(), -1, m_wallpaperPathBuffer, MAX_PATH, nullptr, nullptr);
             
-            // TODO: Load scaling mode
-            // m_scalingMode = it->second.scalingMode;
+            m_scalingMode = it->second.scalingMode;
+            m_loopEnabled = it->second.loop;
+            m_volume = it->second.volume;
         }
+        
+        // Load global settings
+        m_batteryPause = settings.batteryAwareEnabled;
+        m_fullscreenPause = settings.gameModeEnabled;
     }
 }
 
 void SettingsWindow::ApplySettings() {
-    if (!m_monitorManager) return;
+    if (!m_monitorManager || !m_config) return;
+    
+    auto* monitor = m_monitorManager->GetMonitor(m_selectedMonitorIndex);
+    if (!monitor) return;
     
     // Convert UTF-8 buffer to wstring
     wchar_t wPath[MAX_PATH];
     MultiByteToWideChar(CP_UTF8, 0, m_wallpaperPathBuffer, -1, wPath, MAX_PATH);
     
-    // Apply to current monitor
-    if (m_desktopManager) {
-        m_desktopManager->SetWallpaper(m_selectedMonitorIndex, wPath);
+    // Create monitor config
+    Configuration::MonitorConfig config;
+    config.wallpaperPath = wPath;
+    config.enabled = true;
+    config.scalingMode = m_scalingMode;
+    config.loop = m_loopEnabled;
+    config.volume = m_volume;
+    
+    // Save to configuration
+    m_config->SetMonitorConfig(monitor->deviceName, config);
+    
+    // Save global settings
+    m_config->SetGameModeEnabled(m_fullscreenPause);
+    m_config->SetBatteryAwareEnabled(m_batteryPause);
+    
+    // Persist to disk
+    if (m_config->Save()) {
+        Logger::Info("Settings saved successfully");
+    } else {
+        Logger::Error("Failed to save settings");
     }
     
-    // TODO: Apply resource settings to Config/ResourceManager
-    
-    // Check if user has no wallpaper set
-    if (wcslen(wPath) > 0) {
-        // Maybe save to config file here
+    // Apply to desktop manager
+    if (m_desktopManager && wcslen(wPath) > 0) {
+        m_desktopManager->SetWallpaper(m_selectedMonitorIndex, wPath);
+        Logger::Info("Wallpaper applied to monitor");
     }
 }
 

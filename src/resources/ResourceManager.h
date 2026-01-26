@@ -22,6 +22,7 @@ public:
     void Update();
 
     bool IsPaused() const { return m_paused; }
+    void SetPaused(bool paused) { m_manualPause = paused; }
     float GetFPSMultiplier() const { return m_fpsMultiplier; }
 
 private:
@@ -31,6 +32,7 @@ private:
     std::unique_ptr<BatteryMonitor> m_batteryMonitor;
 
     bool m_paused;
+    bool m_manualPause;
     float m_fpsMultiplier;
     bool m_initialized;
 };
