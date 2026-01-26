@@ -1,5 +1,5 @@
-#include "SettingsWindow.h"
 #include "core/Configuration.h"
+#include "SettingsWindow.h"
 #include "core/Logger.h"
 #include "desktop/MonitorManager.h"
 #include "desktop/DesktopManager.h"
@@ -213,8 +213,17 @@ void SettingsWindow::Show() {
     m_visible = true;
     
     // Refresh monitor list on show
+    // Refresh monitor list on show
     if (m_monitorManager) {
         m_monitorManager->Update();
+    }
+    
+    // Load global settings
+    if (m_config) {
+        const auto& settings = m_config->GetSettings();
+        m_batteryPause = settings.batteryAwareEnabled;
+        m_fullscreenPause = settings.gameModeEnabled;
+        m_blockedApps = settings.processBlocklist;
     }
 }
 
@@ -318,6 +327,62 @@ void SettingsWindow::DrawUI() {
             ImGui::Separator();
             ImGui::Spacing();
             
+            ImGui::Text("App Detection (Pause when foreground)");
+            
+            // List box for blocked apps
+            if (ImGui::BeginListBox("##AppList", ImVec2(-FLT_MIN, 100))) {
+                for (int i = 0; i < m_blockedApps.size(); i++) {
+                    const std::string& app = m_blockedApps[i];
+                    bool isSelected = (m_selectedAppIndex == i);
+                    if (ImGui::Selectable(app.c_str(), isSelected)) {
+                        m_selectedAppIndex = i;
+                    }
+                    if (isSelected) {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                }
+                ImGui::EndListBox();
+            }
+
+            // Buttons
+            if (ImGui::Button("Add .exe")) {
+                std::wstring exePath = OpenFileDialog();
+                if (!exePath.empty()) {
+                    // Extract filename only
+                    size_t lastSlash = exePath.find_last_of(L"\\/");
+                    if (lastSlash != std::wstring::npos) {
+                        std::wstring filename = exePath.substr(lastSlash + 1);
+                        int len = WideCharToMultiByte(CP_UTF8, 0, filename.c_str(), -1, nullptr, 0, nullptr, nullptr);
+                        if (len > 0) {
+                            std::string asciiFilename(len, '\0');
+                            WideCharToMultiByte(CP_UTF8, 0, filename.c_str(), -1, &asciiFilename[0], len, nullptr, nullptr);
+                            asciiFilename.resize(len - 1);
+                            
+                            // Check if exists
+                            bool exists = false;
+                            for(const auto& existing : m_blockedApps) {
+                                if (_stricmp(existing.c_str(), asciiFilename.c_str()) == 0) exists = true;
+                            }
+                            
+                            if (!exists) {
+                                m_blockedApps.push_back(asciiFilename);
+                            }
+                        }
+                    }
+                }
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Remove Selected")) {
+                if (m_selectedAppIndex >= 0 && m_selectedAppIndex < m_blockedApps.size()) {
+                    m_blockedApps.erase(m_blockedApps.begin() + m_selectedAppIndex);
+                    m_selectedAppIndex = -1;
+                }
+            }
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+            
             if (ImGui::Button("Apply", ImVec2(120, 0))) {
                 ApplySettings();
             }
@@ -382,6 +447,8 @@ void SettingsWindow::ApplySettings() {
     // Save global settings
     m_config->SetGameModeEnabled(m_fullscreenPause);
     m_config->SetBatteryAwareEnabled(m_batteryPause);
+    m_config->SetProcessBlocklist(m_blockedApps);
+    m_config->SetProcessBlocklist(m_blockedApps);
     
     // Persist to disk
     if (m_config->Save()) {

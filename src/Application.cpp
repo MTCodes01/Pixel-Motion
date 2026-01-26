@@ -152,8 +152,13 @@ int Application::Run() {
         
         double waitSeconds = 0.033; // Default 30 FPS
         
-        if (m_desktopManager) {
+        bool isPaused = m_resourceManager ? m_resourceManager->IsPaused() : false;
+
+        if (m_desktopManager && !isPaused) {
             waitSeconds = m_desktopManager->GetTimeToNextUpdate();
+        } else {
+             // Paused (and not Settings window) - sleep longer
+             waitSeconds = 0.1; // 100ms
         }
         
         // If settings visible, force at least 60 FPS for UI
@@ -181,7 +186,9 @@ void Application::Update() {
     }
 
     // Update desktop manager (handle monitor changes)
-    if (m_desktopManager) {
+    bool isPaused = m_resourceManager ? m_resourceManager->IsPaused() : false;
+    
+    if (m_desktopManager && !isPaused) {
         m_desktopManager->Update();
     }
 }

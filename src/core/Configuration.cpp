@@ -60,6 +60,9 @@ bool Configuration::Load() {
         if (j.contains("batteryThreshold")) {
             m_settings.batteryThreshold = j["batteryThreshold"].get<int>();
         }
+        if (j.contains("processBlocklist")) {
+            m_settings.processBlocklist = j["processBlocklist"].get<std::vector<std::string>>();
+        }
         
         // Load monitor configurations
         if (j.contains("monitors")) {
@@ -123,6 +126,7 @@ bool Configuration::Save() {
         j["batteryAwareEnabled"] = m_settings.batteryAwareEnabled;
         j["autoStart"] = m_settings.autoStart;
         j["batteryThreshold"] = m_settings.batteryThreshold;
+        j["processBlocklist"] = m_settings.processBlocklist;
         
         // Save monitor configurations
         json monitorsJson = json::object();
@@ -178,6 +182,10 @@ Configuration::MonitorConfig* Configuration::GetMonitorConfig(const std::wstring
 
 void Configuration::SetMonitorConfig(const std::wstring& deviceName, const MonitorConfig& config) {
     m_settings.monitors[deviceName] = config;
+}
+
+void Configuration::SetProcessBlocklist(const std::vector<std::string>& list) {
+    m_settings.processBlocklist = list;
 }
 
 } // namespace PixelMotion

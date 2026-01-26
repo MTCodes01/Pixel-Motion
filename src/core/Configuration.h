@@ -3,6 +3,12 @@
 #include <string>
 #include <map>
 #include <filesystem>
+#include <vector>
+#include <fstream>
+#include <nlohmann/json.hpp>
+
+// Use nlohmann json
+using json = nlohmann::json;
 
 namespace PixelMotion {
 
@@ -24,6 +30,7 @@ public:
         bool autoStart = false;
         int batteryThreshold = 20; // Percentage
         std::map<std::wstring, MonitorConfig> monitors; // Key: monitor device name
+        std::vector<std::string> processBlocklist;
     };
 
     Configuration();
@@ -51,7 +58,9 @@ public:
     // Monitor-specific configuration
     MonitorConfig* GetMonitorConfig(const std::wstring& deviceName);
     void SetMonitorConfig(const std::wstring& deviceName, const MonitorConfig& config);
-
+    
+    // Process Blocklist
+    void SetProcessBlocklist(const std::vector<std::string>& list);
 
 private:
     std::filesystem::path GetConfigPath() const;
