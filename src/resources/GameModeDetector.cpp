@@ -114,6 +114,7 @@ bool GameModeDetector::IsWindowFullscreen(HWND hwnd) {
     }
 
     // Check if window covers entire monitor (with small tolerance)
+    // Check if window covers entire monitor (with small tolerance)
     const int tolerance = 2; // Allow small mismatch
     bool coversMonitor = 
         (windowRect.left <= monitorInfo.rcMonitor.left + tolerance) &&
@@ -121,7 +122,20 @@ bool GameModeDetector::IsWindowFullscreen(HWND hwnd) {
         (windowRect.right >= monitorInfo.rcMonitor.right - tolerance) &&
         (windowRect.bottom >= monitorInfo.rcMonitor.bottom - tolerance);
 
-    if (!coversMonitor) {
+    // Also check for "Borderless Windowed" - might be slightly larger or smaller
+    // or simply a popup window that covers most of the screen
+    int monitorWidth = monitorInfo.rcMonitor.right - monitorInfo.rcMonitor.left;
+    int monitorHeight = monitorInfo.rcMonitor.bottom - monitorInfo.rcMonitor.top;
+    int windowWidth = windowRect.right - windowRect.left;
+    int windowHeight = windowRect.bottom - windowRect.top;
+
+    // Coverage check: if window area is >= 95% of monitor area, consider it potential fullscreen
+    // This helps with games that might have 1px borders or slight scaling
+    long monitorArea = monitorWidth * monitorHeight;
+    long windowArea = windowWidth * windowHeight;
+    bool significantCoverage = (windowArea >= (monitorArea * 0.95));
+
+    if (!coversMonitor && !significantCoverage) {
         return false;
     }
 
@@ -137,10 +151,18 @@ bool GameModeDetector::IsWindowFullscreen(HWND hwnd) {
     bool hasPopupStyle = (style & WS_POPUP) != 0;
     bool noCaption = (style & WS_CAPTION) != WS_CAPTION;
     bool isTopmost = (exStyle & WS_EX_TOPMOST) != 0;
-
-    // Consider it fullscreen if it covers the monitor and has appropriate styles
-    // Relaxed check: just covering monitor + popup OR no caption is usually enough
-    return coversMonitor && (hasPopupStyle || noCaption || isTopmost);
+    // Some borderless games still have WS_OVERLAPPED logic but region is masked
+    
+    // Improved logic:
+    // 1. Strict coverage + (Popup OR NoCaption OR Topmost)
+    // 2. Significant coverage + (Popup AND NoCaption) -> Likely borderless
+    
+    if (coversMonitor) {
+         return (hasPopupStyle || noCaption || isTopmost);
+    }
+    
+    // For significant coverage but not exact match (borderless often does this)
+    return (hasPopupStyle && noCaption);
 }
 
 std::string GameModeDetector::GetProcessName(HWND hwnd) {
@@ -149,12 +171,22 @@ std::string GameModeDetector::GetProcessName(HWND hwnd) {
     DWORD processId;
     GetWindowThreadProcessId(hwnd, &processId);
     
-    HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, processId);
+    // Use PROCESS_QUERY_LIMITED_INFORMATION for wider compatibility
+    // (works for elevated processes if we are standard user, usually)
+    HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
     if (hProcess) {
         char buffer[MAX_PATH];
-        if (GetModuleBaseNameA(hProcess, nullptr, buffer, MAX_PATH)) {
+        DWORD size = MAX_PATH;
+        // QueryFullProcessImageName is more reliable with LIMITED_INFORMATION
+        if (QueryFullProcessImageNameA(hProcess, 0, buffer, &size)) {
+            // Extract filename from full path
+            std::string fullPath(buffer);
+            size_t lastSlash = fullPath.find_last_of("\\/");
             CloseHandle(hProcess);
-            return std::string(buffer);
+            if (lastSlash != std::string::npos) {
+                return fullPath.substr(lastSlash + 1);
+            }
+            return fullPath;
         }
         CloseHandle(hProcess);
     }

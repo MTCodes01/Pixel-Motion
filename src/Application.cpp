@@ -158,7 +158,8 @@ int Application::Run() {
             waitSeconds = m_desktopManager->GetTimeToNextUpdate();
         } else {
              // Paused (and not Settings window) - sleep longer
-             waitSeconds = 0.1; // 100ms
+             // Reduce wakeups significantly when paused to save power/GPU
+             waitSeconds = 0.25; // 250ms
         }
         
         // If settings visible, force at least 60 FPS for UI
