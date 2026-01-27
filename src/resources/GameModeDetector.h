@@ -33,6 +33,10 @@ private:
     HWND m_lastForegroundWindow;
     bool m_initialized;
     
+    // Hysteresis
+    bool m_pendingState = false;
+    int m_consecutiveFrames = 0;
+    
     std::vector<std::string> m_processBlocklist;
 };
 

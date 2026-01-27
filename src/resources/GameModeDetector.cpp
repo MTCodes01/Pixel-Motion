@@ -67,14 +67,28 @@ void GameModeDetector::Update() {
     // Update state state
     bool newState = isBlocked || isFullscreen;
     
-    if (m_fullscreenDetected != newState) {
-        m_fullscreenDetected = newState;
-        if (m_fullscreenDetected) {
-            if (isBlocked) Logger::Info("Game Mode active (Blocklist match)");
-            else Logger::Info("Game Mode active (Fullscreen detected)");
-        } else {
-            Logger::Info("Game Mode deactivated");
+    // Hysteresis logic to prevent rapid toggling
+    if (newState == m_pendingState) {
+        m_consecutiveFrames++;
+    } else {
+        m_pendingState = newState;
+        m_consecutiveFrames = 0;
+    }
+    
+    const int THRESHOLD_FRAMES = 10; // Approx 300ms at 30fps update rate
+    
+    if (m_consecutiveFrames >= THRESHOLD_FRAMES) {
+        if (m_fullscreenDetected != m_pendingState) {
+            m_fullscreenDetected = m_pendingState;
+            if (m_fullscreenDetected) {
+                if (isBlocked) Logger::Info("Game Mode active (Blocklist match)");
+                else Logger::Info("Game Mode active (Fullscreen detected)");
+            } else {
+                Logger::Info("Game Mode deactivated");
+            }
         }
+        // Clamp to avoid overflow, but keep above threshold
+        m_consecutiveFrames = THRESHOLD_FRAMES;
     }
     
     m_lastForegroundWindow = foregroundWindow;
