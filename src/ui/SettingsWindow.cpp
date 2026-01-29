@@ -269,6 +269,15 @@ void SettingsWindow::Show() {
         m_fullscreenPause = settings.gameModeEnabled;
         m_blockedApps = settings.processBlocklist;
     }
+
+    // Load initial monitor settings
+    if (m_monitorManager && m_monitorManager->GetMonitorCount() > 0) {
+        // Validation of index
+        if (m_selectedMonitorIndex >= m_monitorManager->GetMonitorCount()) 
+            m_selectedMonitorIndex = 0;
+            
+        LoadSettingsForMonitor(m_selectedMonitorIndex);
+    }
 }
 
 void SettingsWindow::Hide() {
