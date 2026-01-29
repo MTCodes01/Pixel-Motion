@@ -63,6 +63,7 @@ public:
     void SetProcessBlocklist(const std::vector<std::string>& list);
 
 private:
+    void SetStartupRegistry(bool enable);
     std::filesystem::path GetConfigPath() const;
 
     Settings m_settings;

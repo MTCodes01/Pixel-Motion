@@ -320,6 +320,7 @@ void SettingsWindow::DrawUI() {
             ImGui::Spacing();
             ImGui::Separator();
             ImGui::Text("Performance");
+            ImGui::Checkbox("Start with Windows", &m_autoStart);
             ImGui::Checkbox("Pause on Battery Power", &m_batteryPause);
             ImGui::Checkbox("Pause when Fullscreen App Detected", &m_fullscreenPause);
             
@@ -422,6 +423,7 @@ void SettingsWindow::LoadSettingsForMonitor(int monitorIndex) {
         // Load global settings
         m_batteryPause = settings.batteryAwareEnabled;
         m_fullscreenPause = settings.gameModeEnabled;
+        m_autoStart = settings.autoStart;
     }
 }
 
@@ -447,6 +449,7 @@ void SettingsWindow::ApplySettings() {
     // Save global settings
     m_config->SetGameModeEnabled(m_fullscreenPause);
     m_config->SetBatteryAwareEnabled(m_batteryPause);
+    m_config->SetStartWithWindows(m_autoStart);
     m_config->SetProcessBlocklist(m_blockedApps);
     m_config->SetProcessBlocklist(m_blockedApps);
     

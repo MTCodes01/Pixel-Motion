@@ -128,6 +128,9 @@ bool Configuration::Save() {
         j["batteryThreshold"] = m_settings.batteryThreshold;
         j["processBlocklist"] = m_settings.processBlocklist;
         
+        // Apply startup setting to registry
+        SetStartupRegistry(m_settings.autoStart);
+        
         // Save monitor configurations
         json monitorsJson = json::object();
         for (const auto& [deviceName, config] : m_settings.monitors) {
@@ -186,6 +189,29 @@ void Configuration::SetMonitorConfig(const std::wstring& deviceName, const Monit
 
 void Configuration::SetProcessBlocklist(const std::vector<std::string>& list) {
     m_settings.processBlocklist = list;
+}
+
+void Configuration::SetStartupRegistry(bool enable) {
+    HKEY hKey;
+    const wchar_t* keyPath = L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+    const wchar_t* valueName = L"PixelMotion";
+
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, keyPath, 0, KEY_WRITE, &hKey) == ERROR_SUCCESS) {
+        if (enable) {
+            wchar_t exePath[MAX_PATH];
+            GetModuleFileName(nullptr, exePath, MAX_PATH);
+            // Quote the path to be safe
+            std::wstring cmd = L"\"" + std::wstring(exePath) + L"\"";
+            RegSetValueEx(hKey, valueName, 0, REG_SZ, 
+                          reinterpret_cast<const BYTE*>(cmd.c_str()), 
+                          (cmd.length() + 1) * sizeof(wchar_t));
+        } else {
+            RegDeleteValue(hKey, valueName);
+        }
+        RegCloseKey(hKey);
+    } else {
+        Logger::Error("Failed to open registry key for startup configuration");
+    }
 }
 
 } // namespace PixelMotion

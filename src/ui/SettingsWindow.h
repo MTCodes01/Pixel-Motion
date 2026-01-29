@@ -72,9 +72,12 @@ private:
     char m_wallpaperPathBuffer[MAX_PATH];
     const char* m_monitorNames[10]; // Simplified for now
     std::vector<std::string> m_monitorIds;
-    bool m_batteryPause;
-    bool m_fullscreenPause;
-    int m_scalingMode;
+    bool m_batteryPause = true;
+    bool m_fullscreenPause = true;
+    bool m_autoStart = false;
+    int m_scalingMode = 0;
+    
+    // App detection
     
     std::vector<std::string> m_blockedApps;
     int m_selectedAppIndex;
