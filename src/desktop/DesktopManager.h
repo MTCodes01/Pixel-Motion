@@ -23,6 +23,7 @@ public:
     void Shutdown();
 
     bool SetWallpaper(int monitorIndex, const std::wstring& videoPath);
+    void RestoreWallpapers();
 
     void Update();
     void Render();

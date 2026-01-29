@@ -108,6 +108,9 @@ bool Application::InitializeSubsystems() {
     // Connect desktop manager to configuration for scaling modes
     m_desktopManager->SetConfiguration(m_config.get());
     
+    // Restore saved wallpapers
+    m_desktopManager->RestoreWallpapers();
+    
     // Connect tray icon to resource manager for pause/resume
     m_trayIcon->SetResourceManager(m_resourceManager.get());
     

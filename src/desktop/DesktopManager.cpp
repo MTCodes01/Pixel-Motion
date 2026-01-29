@@ -165,6 +165,34 @@ bool DesktopManager::SetWallpaper(int monitorIndex, const std::wstring& videoPat
     return window->LoadVideo(videoPath);
 }
 
+void DesktopManager::RestoreWallpapers() {
+    if (!m_config) return;
+
+    Logger::Info("Restoring saved wallpapers...");
+
+    for (size_t i = 0; i < m_wallpaperWindows.size(); i++) {
+        auto* window = m_wallpaperWindows[i].get();
+        const auto& monitor = window->GetMonitor();
+        
+        auto* monitorConfig = m_config->GetMonitorConfig(monitor.deviceName);
+        if (monitorConfig) {
+            // Apply scaling mode regardless of wallpaper (in case they want to set it before invalid wallpaper)
+            window->SetScalingMode(monitorConfig->scalingMode);
+
+            // Restore wallpaper if enabled and path exists
+            if (monitorConfig->enabled && !monitorConfig->wallpaperPath.empty()) {
+                if (std::filesystem::exists(monitorConfig->wallpaperPath)) {
+                    // Use SetWallpaper to handle logging and any future logic
+                    SetWallpaper(static_cast<int>(i), monitorConfig->wallpaperPath);
+                } else {
+                    std::string pathUtf8(monitorConfig->wallpaperPath.begin(), monitorConfig->wallpaperPath.end());
+                    Logger::Warning("Saved wallpaper path not found: " + pathUtf8);
+                }
+            }
+        }
+    }
+}
+
 void DesktopManager::Update() {
     // Check if WorkerW still exists (Windows might recreate it)
     if (!IsWindow(m_workerW)) {
