@@ -396,6 +396,7 @@ void SettingsWindow::DrawUI() {
             // Header
             ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[0]); // Use default font for now, scaled up if possible
             ImGui::TextColored(ImVec4(0.16f, 0.16f, 0.16f, 1.0f), "SETTINGS");
+            ImGui::PopFont(); // FIX: Added missing PopFont
             ImGui::Separator();
             ImGui::Spacing();
             ImGui::Spacing();
