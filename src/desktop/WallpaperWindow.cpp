@@ -161,16 +161,22 @@ bool WallpaperWindow::LoadVideo(const std::wstring& videoPath) {
     }
 
     // Update frame interval based on video frame rate
-    // Cap wallpaper playback at 30 FPS: provides perfectly fluid desktop motion while cutting GPU/memory load by 50%
     double fps = m_videoDecoder->GetFrameRate();
     if (fps > 0) {
-        double targetFps = (fps > 30.0) ? 30.0 : fps;
-        m_frameInterval = 1.0 / targetFps;
+        m_frameInterval = 1.0 / fps;
     }
 
-    // Decode first frame
-    if (!m_videoDecoder->DecodeNextFrame()) {
-        Logger::Error("Failed to decode first frame");
+    // Decode first frame (allow several attempts for initial keyframe / GOP headers)
+    bool firstFrameDecoded = false;
+    for (int attempt = 0; attempt < 30; ++attempt) {
+        if (m_videoDecoder->DecodeNextFrame()) {
+            firstFrameDecoded = true;
+            break;
+        }
+    }
+
+    if (!firstFrameDecoded) {
+        Logger::Error("Failed to decode first frame after multiple attempts");
         m_videoDecoder.reset();
         return false;
     }
@@ -261,33 +267,17 @@ void WallpaperWindow::Update() {
     std::chrono::duration<double> elapsed = now - m_lastFrameTime;
 
     if (elapsed.count() >= m_frameInterval) {
-        // For high framerate videos (e.g. 60 FPS), maintain true 1.0x playback speed when capped at 30 FPS
-        double nativeFps = m_videoDecoder->GetFrameRate();
-        int steps = 1;
-        if (nativeFps > 35.0) {
-            steps = static_cast<int>(elapsed.count() * nativeFps + 0.5);
-            if (steps < 1) steps = 1;
-            if (steps > 3) steps = 3;
-        }
-
-        bool success = false;
-        for (int s = 0; s < steps; ++s) {
-            if (!m_videoDecoder->DecodeNextFrame()) {
-                // End of file - loop back to beginning
-                if (m_videoDecoder->IsEndOfFile()) {
-                    m_videoDecoder->Reset();
-                    m_videoDecoder->DecodeNextFrame();
-                    success = true;
-                }
-                break;
+        // Decode next frame
+        if (!m_videoDecoder->DecodeNextFrame()) {
+            // End of file - loop back to beginning
+            if (m_videoDecoder->IsEndOfFile()) {
+                m_videoDecoder->Reset();
+                m_videoDecoder->DecodeNextFrame();
             }
-            success = true;
         }
         
-        if (success) {
-            m_lastFrameTime = now;
-            m_needsRepaint = true;
-        }
+        m_lastFrameTime = now;
+        m_needsRepaint = true;
     }
 }
 

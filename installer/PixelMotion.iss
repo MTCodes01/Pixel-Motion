@@ -1,5 +1,5 @@
 #define MyAppName "Pixel Motion"
-#define MyAppVersion "1.2.2"
+#define MyAppVersion "1.2.3"
 #define MyAppPublisher "Pixel Motion Project"
 #define MyAppURL "https://github.com/MTCodes01/Pixel-Motion"
 #define MyAppExeName "PixelMotion.exe"
@@ -20,7 +20,7 @@ AllowNoIcons=yes
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 OutputDir=..\build\bin
-OutputBaseFilename=PixelMotion-Setup-v1.2.2
+OutputBaseFilename=PixelMotion-Setup-v1.2.3
 SetupIconFile=..\src\ui\PixelMotion.ico
 Compression=lzma2/ultra64
 SolidCompression=yes

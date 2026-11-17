@@ -305,9 +305,7 @@ void RendererContext::Render() {
 
 void RendererContext::Present() {
     if (m_swapChain) {
-        // Frame pacing is accurately controlled by the steady_clock timer in WallpaperWindow.
-        // Present(0, 0) avoids multi-monitor VSync queue stalls and reduces GPU idle spin.
-        m_swapChain->Present(0, 0);
+        m_swapChain->Present(1, 0); // VSync synchronized with DWM desktop compositing
     }
 }
 
