@@ -48,7 +48,7 @@ $issPath = Join-Path $scriptDir "PixelMotion.iss"
 & $iscc $issPath
 
 # 4. Sign the Setup installer executable
-$setupExe = Join-Path $binDir "PixelMotion-Setup-v1.2.3.exe"
+$setupExe = Join-Path $binDir "PixelMotion-Setup-v1.2.4.exe"
 if (!(Test-Path $setupExe)) {
     throw "Setup executable was not generated at: $setupExe"
 }

@@ -207,14 +207,6 @@ void Application::Update() {
     if (m_desktopManager && !isPaused) {
         m_desktopManager->Update();
     }
-
-    // Periodically trim process working set to return unreferenced memory pages to the OS
-    static auto s_lastWorkingSetTrim = std::chrono::steady_clock::now();
-    auto now = std::chrono::steady_clock::now();
-    if (std::chrono::duration_cast<std::chrono::seconds>(now - s_lastWorkingSetTrim).count() >= 30) {
-        SetProcessWorkingSetSize(GetCurrentProcess(), (SIZE_T)-1, (SIZE_T)-1);
-        s_lastWorkingSetTrim = now;
-    }
 }
 
 void Application::Render() {

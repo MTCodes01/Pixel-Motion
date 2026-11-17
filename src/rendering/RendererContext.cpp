@@ -22,6 +22,8 @@ RendererContext::RendererContext()
     , m_scalingMode(2) // Default to Stretch
     , m_videoWidth(0)
     , m_videoHeight(0)
+    , m_procWidth(0)
+    , m_procHeight(0)
     , m_initialized(false)
 {
 }
@@ -97,6 +99,16 @@ void RendererContext::Shutdown() {
     if (!m_initialized) {
         return;
     }
+
+    m_outputView.Reset();
+    m_videoProcessor.Reset();
+    m_processorEnumerator.Reset();
+    m_videoContext.Reset();
+    m_videoDevice.Reset();
+    m_procRgbaSRV.Reset();
+    m_procRgbaTexture.Reset();
+    m_procWidth = 0;
+    m_procHeight = 0;
 
     m_samplerState.Reset();
     m_videoSRV.Reset();
@@ -369,29 +381,23 @@ void RendererContext::SetVideoTexture(ID3D11Texture2D* texture, int arrayIndex, 
         return;
     }
 
-    // Static variables to cache video processing resources
-    static ComPtr<ID3D11Texture2D> s_rgbaTexture;
-    static ComPtr<ID3D11ShaderResourceView> s_rgbaSRV;
-    static ComPtr<ID3D11VideoDevice> s_videoDevice;
-    static ComPtr<ID3D11VideoContext> s_videoContext;
-    static ComPtr<ID3D11VideoProcessor> s_videoProcessor;
-    static ComPtr<ID3D11VideoProcessorEnumerator> s_processorEnumerator;
-    static ComPtr<ID3D11VideoProcessorOutputView> s_outputView;
-    static std::map<int, ComPtr<ID3D11VideoProcessorInputView>> s_inputViewCache;
-    static ID3D11Texture2D* s_cachedTexture = nullptr;
-    static UINT s_videoWidth = 0;
-    static UINT s_videoHeight = 0;
-    
-    // Check if we need to create/recreate resources for new video dimensions or texture source
-    if (texDesc.Width != s_videoWidth || texDesc.Height != s_videoHeight) {
-        s_inputViewCache.clear();
-        s_cachedTexture = nullptr;
-        s_videoWidth = texDesc.Width;
-        s_videoHeight = texDesc.Height;
+    // Check if we need to create/recreate resources for new video dimensions
+    if (texDesc.Width != m_procWidth || texDesc.Height != m_procHeight || !m_videoProcessor) {
+        m_procWidth = texDesc.Width;
+        m_procHeight = texDesc.Height;
         
         Logger::Info("Creating video processing resources for " + 
-                     std::to_string(s_videoWidth) + "x" + std::to_string(s_videoHeight));
+                     std::to_string(m_procWidth) + "x" + std::to_string(m_procHeight));
         
+        // Reset old resources
+        m_outputView.Reset();
+        m_videoProcessor.Reset();
+        m_processorEnumerator.Reset();
+        m_videoContext.Reset();
+        m_videoDevice.Reset();
+        m_procRgbaSRV.Reset();
+        m_procRgbaTexture.Reset();
+
         // Create an RGBA texture for rendering
         D3D11_TEXTURE2D_DESC rgbaDesc = {};
         rgbaDesc.Width = texDesc.Width;
@@ -403,7 +409,7 @@ void RendererContext::SetVideoTexture(ID3D11Texture2D* texture, int arrayIndex, 
         rgbaDesc.Usage = D3D11_USAGE_DEFAULT;
         rgbaDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
         
-        HRESULT hr = device->CreateTexture2D(&rgbaDesc, nullptr, &s_rgbaTexture);
+        HRESULT hr = device->CreateTexture2D(&rgbaDesc, nullptr, &m_procRgbaTexture);
         if (FAILED(hr)) {
             Logger::Error("Failed to create RGBA texture: " + std::to_string(hr));
             return;
@@ -415,20 +421,20 @@ void RendererContext::SetVideoTexture(ID3D11Texture2D* texture, int arrayIndex, 
         srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
         srvDesc.Texture2D.MipLevels = 1;
         
-        hr = device->CreateShaderResourceView(s_rgbaTexture.Get(), &srvDesc, &s_rgbaSRV);
+        hr = device->CreateShaderResourceView(m_procRgbaTexture.Get(), &srvDesc, &m_procRgbaSRV);
         if (FAILED(hr)) {
             Logger::Error("Failed to create SRV: " + std::to_string(hr));
             return;
         }
         
         // Get video device interface
-        hr = device->QueryInterface(__uuidof(ID3D11VideoDevice), &s_videoDevice);
+        hr = device->QueryInterface(__uuidof(ID3D11VideoDevice), &m_videoDevice);
         if (FAILED(hr)) {
             Logger::Error("Failed to get ID3D11VideoDevice: " + std::to_string(hr));
             return;
         }
         
-        hr = context->QueryInterface(__uuidof(ID3D11VideoContext), &s_videoContext);
+        hr = context->QueryInterface(__uuidof(ID3D11VideoContext), &m_videoContext);
         if (FAILED(hr)) {
             Logger::Error("Failed to get ID3D11VideoContext: " + std::to_string(hr));
             return;
@@ -443,35 +449,34 @@ void RendererContext::SetVideoTexture(ID3D11Texture2D* texture, int arrayIndex, 
         contentDesc.OutputHeight = texDesc.Height;
         contentDesc.Usage = D3D11_VIDEO_USAGE_PLAYBACK_NORMAL;
         
-        hr = s_videoDevice->CreateVideoProcessorEnumerator(&contentDesc, &s_processorEnumerator);
+        hr = m_videoDevice->CreateVideoProcessorEnumerator(&contentDesc, &m_processorEnumerator);
         if (FAILED(hr)) {
             Logger::Error("Failed to create video processor enumerator: " + std::to_string(hr));
             return;
         }
         
-        hr = s_videoDevice->CreateVideoProcessor(s_processorEnumerator.Get(), 0, &s_videoProcessor);
+        hr = m_videoDevice->CreateVideoProcessor(m_processorEnumerator.Get(), 0, &m_videoProcessor);
         if (FAILED(hr)) {
             Logger::Error("Failed to create video processor: " + std::to_string(hr));
             return;
         }
         
-        
         // Set source and destination rectangles to handle padding
         RECT sourceRect = { 0, 0, static_cast<LONG>(contentWidth), static_cast<LONG>(contentHeight) };
-        s_videoContext->VideoProcessorSetStreamSourceRect(s_videoProcessor.Get(), 0, TRUE, &sourceRect);
+        m_videoContext->VideoProcessorSetStreamSourceRect(m_videoProcessor.Get(), 0, TRUE, &sourceRect);
         
         // Destination rect should also match content size (scaling happens in vertex shader)
         RECT destRect = { 0, 0, static_cast<LONG>(contentWidth), static_cast<LONG>(contentHeight) };
-        s_videoContext->VideoProcessorSetStreamDestRect(s_videoProcessor.Get(), 0, TRUE, &destRect);
+        m_videoContext->VideoProcessorSetStreamDestRect(m_videoProcessor.Get(), 0, TRUE, &destRect);
         
         // Create output view (reusable for same dimensions)
         D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC outputViewDesc = {};
         outputViewDesc.ViewDimension = D3D11_VPOV_DIMENSION_TEXTURE2D;
         outputViewDesc.Texture2D.MipSlice = 0;
         
-        hr = s_videoDevice->CreateVideoProcessorOutputView(s_rgbaTexture.Get(), 
-                                                            s_processorEnumerator.Get(),
-                                                            &outputViewDesc, &s_outputView);
+        hr = m_videoDevice->CreateVideoProcessorOutputView(m_procRgbaTexture.Get(), 
+                                                            m_processorEnumerator.Get(),
+                                                            &outputViewDesc, &m_outputView);
         if (FAILED(hr)) {
             Logger::Error("Failed to create output view: " + std::to_string(hr));
             return;
@@ -481,44 +486,28 @@ void RendererContext::SetVideoTexture(ID3D11Texture2D* texture, int arrayIndex, 
     }
     
     // Store reference to our RGBA texture for rendering
-    m_videoTexture = s_rgbaTexture;
-    m_videoSRV = s_rgbaSRV;
+    m_videoTexture = m_procRgbaTexture;
+    m_videoSRV = m_procRgbaSRV;
     
     // Now convert the NV12 frame to BGRA
-    if (s_videoProcessor && s_videoDevice && s_videoContext && s_outputView) {
-        if (texture != s_cachedTexture) {
-            s_inputViewCache.clear();
-            s_cachedTexture = texture;
-        }
+    if (m_videoProcessor && m_videoDevice && m_videoContext && m_outputView) {
+        D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC inputViewDesc = {};
+        inputViewDesc.FourCC = 0;
+        inputViewDesc.ViewDimension = D3D11_VPIV_DIMENSION_TEXTURE2D;
+        inputViewDesc.Texture2D.MipSlice = 0;
+        inputViewDesc.Texture2D.ArraySlice = arrayIndex;
 
-        // Retrieve or create input view for this slice (cached to avoid heavy per-frame allocations)
         ComPtr<ID3D11VideoProcessorInputView> inputView;
-        HRESULT hr = S_OK;
-        auto it = s_inputViewCache.find(arrayIndex);
-        if (it != s_inputViewCache.end()) {
-            inputView = it->second;
-        } else {
-            D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC inputViewDesc = {};
-            inputViewDesc.FourCC = 0;
-            inputViewDesc.ViewDimension = D3D11_VPIV_DIMENSION_TEXTURE2D;
-            inputViewDesc.Texture2D.MipSlice = 0;
-            inputViewDesc.Texture2D.ArraySlice = arrayIndex;
-
-            hr = s_videoDevice->CreateVideoProcessorInputView(texture, s_processorEnumerator.Get(), 
-                                                               &inputViewDesc, &inputView);
-            if (SUCCEEDED(hr)) {
-                s_inputViewCache[arrayIndex] = inputView;
-            }
-        }
+        HRESULT hr = m_videoDevice->CreateVideoProcessorInputView(texture, m_processorEnumerator.Get(), 
+                                                                   &inputViewDesc, &inputView);
         
-        if (inputView) {
-            // Perform the conversion
+        if (SUCCEEDED(hr) && inputView) {
             D3D11_VIDEO_PROCESSOR_STREAM stream = {};
             stream.Enable = TRUE;
             stream.pInputSurface = inputView.Get();
             
-            hr = s_videoContext->VideoProcessorBlt(s_videoProcessor.Get(), 
-                                                    s_outputView.Get(), 
+            hr = m_videoContext->VideoProcessorBlt(m_videoProcessor.Get(), 
+                                                    m_outputView.Get(), 
                                                     0, 1, &stream);
             
             if (FAILED(hr)) {
@@ -527,12 +516,6 @@ void RendererContext::SetVideoTexture(ID3D11Texture2D* texture, int arrayIndex, 
                     Logger::Error("VideoProcessorBlt failed: " + std::to_string(hr));
                     errorLogged = true;
                 }
-            }
-        } else {
-            static bool inputViewError = false;
-            if (!inputViewError) {
-                Logger::Error("Failed to create input view: " + std::to_string(hr));
-                inputViewError = true;
             }
         }
     }

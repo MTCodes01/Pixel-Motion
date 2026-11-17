@@ -2,6 +2,7 @@
 
 #include <Windows.h>
 #include <d3d11.h>
+#include <d3d11_1.h>
 #include <dxgi1_2.h>
 #include <wrl/client.h>
 #include <memory>
@@ -53,6 +54,17 @@ private:
 
     ComPtr<ID3D11Texture2D> m_videoTexture;
     ComPtr<ID3D11ShaderResourceView> m_videoSRV;
+
+    // Per-monitor Video Processor resources for D3D11VA hardware conversion
+    ComPtr<ID3D11Texture2D> m_procRgbaTexture;
+    ComPtr<ID3D11ShaderResourceView> m_procRgbaSRV;
+    ComPtr<ID3D11VideoDevice> m_videoDevice;
+    ComPtr<ID3D11VideoContext> m_videoContext;
+    ComPtr<ID3D11VideoProcessor> m_videoProcessor;
+    ComPtr<ID3D11VideoProcessorEnumerator> m_processorEnumerator;
+    ComPtr<ID3D11VideoProcessorOutputView> m_outputView;
+    UINT m_procWidth;
+    UINT m_procHeight;
 
     int m_scalingMode; // 0=Fill, 1=Fit, 2=Stretch, 3=Center
     int m_videoWidth;

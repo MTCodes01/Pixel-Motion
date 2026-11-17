@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(PixelMotion VERSION 1.2.3 LANGUAGES CXX)
+project(PixelMotion VERSION 1.2.4 LANGUAGES CXX)
 
 # C++20 standard required
 set(CMAKE_CXX_STANDARD 20)
