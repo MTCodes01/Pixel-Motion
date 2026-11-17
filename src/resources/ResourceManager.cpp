@@ -85,8 +85,8 @@ void ResourceManager::UpdatePauseState() {
         return;
     }
 
-    // Pause if fullscreen game detected
-    if (m_gameModeDetector->IsFullscreenAppActive()) {
+    // Pause if fullscreen game detected (if enabled)
+    if (m_pauseOnFullscreen && m_gameModeDetector->IsFullscreenAppActive()) {
         m_paused = true;
         m_fpsMultiplier = 0.0f;
         
@@ -96,8 +96,8 @@ void ResourceManager::UpdatePauseState() {
         return;
     }
 
-    // Adjust FPS based on battery status
-    if (m_batteryMonitor->IsOnBattery()) {
+    // Adjust FPS based on battery status (if enabled)
+    if (m_pauseOnBattery && m_batteryMonitor->IsOnBattery()) {
         m_paused = false;
         
         int batteryPercent = m_batteryMonitor->GetBatteryPercent();

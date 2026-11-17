@@ -5,6 +5,7 @@
 #include <d3dcompiler.h>
 #include <d3d11_1.h>
 #include <filesystem>
+#include <map>
 
 namespace PixelMotion {
 
@@ -304,7 +305,9 @@ void RendererContext::Render() {
 
 void RendererContext::Present() {
     if (m_swapChain) {
-        m_swapChain->Present(1, 0); // VSync
+        // Frame pacing is accurately controlled by the steady_clock timer in WallpaperWindow.
+        // Present(0, 0) avoids multi-monitor VSync queue stalls and reduces GPU idle spin.
+        m_swapChain->Present(0, 0);
     }
 }
 
@@ -376,11 +379,15 @@ void RendererContext::SetVideoTexture(ID3D11Texture2D* texture, int arrayIndex, 
     static ComPtr<ID3D11VideoProcessor> s_videoProcessor;
     static ComPtr<ID3D11VideoProcessorEnumerator> s_processorEnumerator;
     static ComPtr<ID3D11VideoProcessorOutputView> s_outputView;
+    static std::map<int, ComPtr<ID3D11VideoProcessorInputView>> s_inputViewCache;
+    static ID3D11Texture2D* s_cachedTexture = nullptr;
     static UINT s_videoWidth = 0;
     static UINT s_videoHeight = 0;
     
-    // Check if we need to create/recreate resources for new video dimensions
+    // Check if we need to create/recreate resources for new video dimensions or texture source
     if (texDesc.Width != s_videoWidth || texDesc.Height != s_videoHeight) {
+        s_inputViewCache.clear();
+        s_cachedTexture = nullptr;
         s_videoWidth = texDesc.Width;
         s_videoHeight = texDesc.Height;
         
@@ -481,18 +488,32 @@ void RendererContext::SetVideoTexture(ID3D11Texture2D* texture, int arrayIndex, 
     
     // Now convert the NV12 frame to BGRA
     if (s_videoProcessor && s_videoDevice && s_videoContext && s_outputView) {
-        // Create input view for this frame - use the correct array slice!
-        D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC inputViewDesc = {};
-        inputViewDesc.FourCC = 0;
-        inputViewDesc.ViewDimension = D3D11_VPIV_DIMENSION_TEXTURE2D;
-        inputViewDesc.Texture2D.MipSlice = 0;
-        inputViewDesc.Texture2D.ArraySlice = arrayIndex;  // Use the frame's array index!
-        
+        if (texture != s_cachedTexture) {
+            s_inputViewCache.clear();
+            s_cachedTexture = texture;
+        }
+
+        // Retrieve or create input view for this slice (cached to avoid heavy per-frame allocations)
         ComPtr<ID3D11VideoProcessorInputView> inputView;
-        HRESULT hr = s_videoDevice->CreateVideoProcessorInputView(texture, s_processorEnumerator.Get(), 
-                                                                   &inputViewDesc, &inputView);
+        HRESULT hr = S_OK;
+        auto it = s_inputViewCache.find(arrayIndex);
+        if (it != s_inputViewCache.end()) {
+            inputView = it->second;
+        } else {
+            D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC inputViewDesc = {};
+            inputViewDesc.FourCC = 0;
+            inputViewDesc.ViewDimension = D3D11_VPIV_DIMENSION_TEXTURE2D;
+            inputViewDesc.Texture2D.MipSlice = 0;
+            inputViewDesc.Texture2D.ArraySlice = arrayIndex;
+
+            hr = s_videoDevice->CreateVideoProcessorInputView(texture, s_processorEnumerator.Get(), 
+                                                               &inputViewDesc, &inputView);
+            if (SUCCEEDED(hr)) {
+                s_inputViewCache[arrayIndex] = inputView;
+            }
+        }
         
-        if (SUCCEEDED(hr)) {
+        if (inputView) {
             // Perform the conversion
             D3D11_VIDEO_PROCESSOR_STREAM stream = {};
             stream.Enable = TRUE;

@@ -9,6 +9,7 @@
 
 #include <Windows.h>
 #include <objbase.h>
+#include <timeapi.h>
 
 namespace PixelMotion {
 
@@ -43,6 +44,9 @@ bool Application::Initialize() {
         Logger::Error("Failed to initialize COM");
         return false;
     }
+
+    // Set 1ms timer precision for low-jitter, battery-efficient frame pacing
+    timeBeginPeriod(1);
 
     // Load configuration
     m_config = std::make_unique<Configuration>();
@@ -108,11 +112,19 @@ bool Application::InitializeSubsystems() {
     // Connect desktop manager to configuration for scaling modes
     m_desktopManager->SetConfiguration(m_config.get());
     
+    // Connect resource manager to configuration
+    m_resourceManager->SetPauseOnFullscreen(m_config->GetGameModeEnabled());
+    m_resourceManager->SetPauseOnBattery(m_config->GetBatteryAwareEnabled());
+    m_resourceManager->SetProcessBlocklist(m_config->GetSettings().processBlocklist);
+
     // Restore saved wallpapers
     m_desktopManager->RestoreWallpapers();
     
     // Connect tray icon to resource manager for pause/resume
     m_trayIcon->SetResourceManager(m_resourceManager.get());
+
+    // Immediate working set trim after loading initial media
+    SetProcessWorkingSetSize(GetCurrentProcess(), (SIZE_T)-1, (SIZE_T)-1);
     
     Logger::Info("All subsystems connected successfully");
 
@@ -195,6 +207,14 @@ void Application::Update() {
     if (m_desktopManager && !isPaused) {
         m_desktopManager->Update();
     }
+
+    // Periodically trim process working set to return unreferenced memory pages to the OS
+    static auto s_lastWorkingSetTrim = std::chrono::steady_clock::now();
+    auto now = std::chrono::steady_clock::now();
+    if (std::chrono::duration_cast<std::chrono::seconds>(now - s_lastWorkingSetTrim).count() >= 30) {
+        SetProcessWorkingSetSize(GetCurrentProcess(), (SIZE_T)-1, (SIZE_T)-1);
+        s_lastWorkingSetTrim = now;
+    }
 }
 
 void Application::Render() {
@@ -229,6 +249,9 @@ void Application::Shutdown() {
         m_config->Save();
         m_config.reset();
     }
+
+    // Restore timer precision
+    timeEndPeriod(1);
 
     CoUninitialize();
 

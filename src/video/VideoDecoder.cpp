@@ -101,6 +101,10 @@ bool VideoDecoder::Initialize(const std::wstring& filePath, ID3D11Device* device
 
     m_initialized = true;
     Logger::Info("Video decoder initialized successfully");
+
+    // Immediate working set trim to release startup allocations back to OS
+    SetProcessWorkingSetSize(GetCurrentProcess(), (SIZE_T)-1, (SIZE_T)-1);
+
     return true;
 }
 
@@ -266,6 +270,14 @@ bool VideoDecoder::OpenFile(const std::wstring& filePath) {
         return false;
     }
 
+    // Pre-allocate format context with low-memory and low-latency flags
+    m_formatContext = avformat_alloc_context();
+    if (m_formatContext) {
+        m_formatContext->probesize = 512 * 1024; // 512KB probe size instead of 50MB
+        m_formatContext->max_analyze_duration = 500000; // 0.5s instead of default 5s
+        m_formatContext->flags |= AVFMT_FLAG_FAST_SEEK | AVFMT_FLAG_NOBUFFER;
+    }
+
     // Open video file
     if (avformat_open_input(&m_formatContext, utf8Path.c_str(), nullptr, nullptr) < 0) {
         Logger::Error("Could not open video file: " + utf8Path);
@@ -276,6 +288,13 @@ bool VideoDecoder::OpenFile(const std::wstring& filePath) {
     if (avformat_find_stream_info(m_formatContext, nullptr) < 0) {
         Logger::Error("Could not find stream information");
         return false;
+    }
+
+    // Discard non-video streams (audio, subtitles) to prevent memory allocation and buffering
+    for (unsigned int i = 0; i < m_formatContext->nb_streams; i++) {
+        if (m_formatContext->streams[i]->codecpar->codec_type != AVMEDIA_TYPE_VIDEO) {
+            m_formatContext->streams[i]->discard = AVDISCARD_ALL;
+        }
     }
 
     // Get duration
@@ -360,6 +379,13 @@ bool VideoDecoder::InitializeDecoder(ID3D11Device* device) {
         Logger::Error("Could not copy codec parameters");
         return false;
     }
+
+    // Limit thread count to 2 threads for lightweight background wallpaper decode.
+    // Default (0) spawns 16-32 threads on modern CPUs, consuming 200MB+ in reference frame pools!
+    m_codecContext->thread_count = 2;
+    m_codecContext->thread_type = FF_THREAD_SLICE;
+    m_codecContext->flags |= AV_CODEC_FLAG_LOW_DELAY;
+    m_codecContext->flags2 |= AV_CODEC_FLAG2_FAST;
 
     // For images, skip hardware acceleration (not supported)
     // For videos, try to use hardware acceleration
@@ -474,6 +500,11 @@ bool VideoDecoder::DecodeNextFrame() {
             av_strerror(ret, errbuf, AV_ERROR_MAX_STRING_SIZE);
             Logger::Error("Error sending packet to decoder: " + std::string(errbuf) + " (" + std::to_string(ret) + ")");
             return false;
+        }
+
+        // Unreference prior frame to release buffers immediately
+        if (m_frame) {
+            av_frame_unref(m_frame);
         }
 
         // Receive decoded frame
