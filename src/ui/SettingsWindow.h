@@ -45,6 +45,7 @@ private:
     bool InitializeDX11();
     bool InitializeImGui();
     void CleanupDX11();
+    bool LoadLogo();
     
     void DrawUI(); // Draw ImGui widgets
     void ApplySettings(); // Save and apply changes
@@ -68,6 +69,7 @@ private:
     ComPtr<ID3D11DeviceContext> m_context;
     ComPtr<IDXGISwapChain> m_swapChain;
     ComPtr<ID3D11RenderTargetView> m_mainRenderTargetView;
+    ComPtr<ID3D11ShaderResourceView> m_logoSRV;
     
     // UI State
     int m_selectedMonitorIndex;

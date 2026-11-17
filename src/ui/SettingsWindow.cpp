@@ -1,5 +1,6 @@
 #include "core/Configuration.h"
 #include "SettingsWindow.h"
+#include "resource.h"
 #include "core/Logger.h"
 #include "desktop/MonitorManager.h"
 #include "desktop/DesktopManager.h"
@@ -9,6 +10,7 @@
 #include <imgui_impl_dx11.h>
 #include <tchar.h>
 #include <commdlg.h> // For GetOpenFileName
+#include <wincodec.h>
 
 // Forward declare message handler from imgui_impl_win32.cpp
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -84,6 +86,13 @@ bool SettingsWindow::Initialize() {
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX, 
         x, y, winW, winH, nullptr, nullptr, wc.hInstance, this);
 
+    // Set Window icons (Taskbar and Alt-Tab)
+    HICON hIcon = LoadIcon(GetModuleHandle(nullptr), MAKEINTRESOURCE(IDI_APP_ICON));
+    if (hIcon) {
+        SendMessage(m_hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
+        SendMessage(m_hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
+    }
+
     // Initialize Direct3D
     if (!InitializeDX11()) {
         CleanupDX11();
@@ -97,6 +106,9 @@ bool SettingsWindow::Initialize() {
         UnregisterClass(_T("PixelMotionSettings"), wc.hInstance);
         return false;
     }
+
+    // Load App Logo Texture for UI
+    LoadLogo();
 
     m_initialized = true;
     return true;
@@ -139,10 +151,98 @@ bool SettingsWindow::InitializeDX11() {
 }
 
 void SettingsWindow::CleanupDX11() {
+    m_logoSRV.Reset();
     m_mainRenderTargetView.Reset();
     m_swapChain.Reset();
     m_context.Reset();
     m_device.Reset();
+}
+
+bool SettingsWindow::LoadLogo() {
+    if (!m_device) return false;
+
+    // Locate logo.png
+    wchar_t exePath[MAX_PATH];
+    GetModuleFileName(nullptr, exePath, MAX_PATH);
+    std::filesystem::path appDir = std::filesystem::path(exePath).parent_path();
+    
+    std::vector<std::filesystem::path> candidates = {
+        appDir / "logo.png",
+        appDir / "logos" / "logo_depth_512.png",
+        appDir / "logos" / "logo_color_512.png",
+        std::filesystem::path("d:\\Github\\Pixel-Motion\\src\\ui\\logo.png"),
+        std::filesystem::path("d:\\Github\\Pixel-Motion\\logos\\logo_depth_512.png")
+    };
+
+    std::filesystem::path chosen;
+    for (const auto& p : candidates) {
+        if (std::filesystem::exists(p)) {
+            chosen = p;
+            break;
+        }
+    }
+
+    if (chosen.empty()) {
+        Logger::Warning("Could not find logo.png for Settings UI");
+        return false;
+    }
+
+    ComPtr<IWICImagingFactory> factory;
+    HRESULT hr = CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&factory));
+    if (FAILED(hr)) return false;
+
+    ComPtr<IWICBitmapDecoder> decoder;
+    hr = factory->CreateDecoderFromFilename(chosen.c_str(), nullptr, GENERIC_READ, WICDecodeMetadataCacheOnDemand, &decoder);
+    if (FAILED(hr)) return false;
+
+    ComPtr<IWICBitmapFrameDecode> frame;
+    hr = decoder->GetFrame(0, &frame);
+    if (FAILED(hr)) return false;
+
+    UINT width = 0, height = 0;
+    frame->GetSize(&width, &height);
+    if (width == 0 || height == 0) return false;
+
+    ComPtr<IWICFormatConverter> converter;
+    factory->CreateFormatConverter(&converter);
+    hr = converter->Initialize(frame.Get(), GUID_WICPixelFormat32bppBGRA, WICBitmapDitherTypeNone, nullptr, 0.0, WICBitmapPaletteTypeCustom);
+    if (FAILED(hr)) return false;
+
+    UINT stride = width * 4;
+    UINT bufferSize = stride * height;
+    std::vector<BYTE> pixelBuffer(bufferSize);
+    hr = converter->CopyPixels(nullptr, stride, bufferSize, pixelBuffer.data());
+    if (FAILED(hr)) return false;
+
+    D3D11_TEXTURE2D_DESC texDesc = {};
+    texDesc.Width = width;
+    texDesc.Height = height;
+    texDesc.MipLevels = 1;
+    texDesc.ArraySize = 1;
+    texDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    texDesc.SampleDesc.Count = 1;
+    texDesc.Usage = D3D11_USAGE_DEFAULT;
+    texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+
+    D3D11_SUBRESOURCE_DATA initData = {};
+    initData.pSysMem = pixelBuffer.data();
+    initData.SysMemPitch = stride;
+
+    ComPtr<ID3D11Texture2D> texture;
+    hr = m_device->CreateTexture2D(&texDesc, &initData, &texture);
+    if (FAILED(hr)) return false;
+
+    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+    srvDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+    srvDesc.Texture2D.MipLevels = 1;
+
+    hr = m_device->CreateShaderResourceView(texture.Get(), &srvDesc, &m_logoSRV);
+    if (SUCCEEDED(hr)) {
+        Logger::Info("Loaded logo texture for Settings UI (" + std::to_string(width) + "x" + std::to_string(height) + ")");
+        return true;
+    }
+    return false;
 }
 
 bool SettingsWindow::InitializeImGui() {
@@ -387,20 +487,42 @@ void SettingsWindow::DrawUI() {
             COL_HEADER_BG
         );
         
-        // Brand Accent Dot & Title
-        draw_list->AddCircleFilled(ImVec2(win_pos.x + 28, win_pos.y + header_height * 0.5f), 5.0f, COL_PRIMARY_RED);
-        
-        if (m_fontTitle) ImGui::PushFont(m_fontTitle);
-        draw_list->AddText(ImVec2(win_pos.x + 42, win_pos.y + 18), COL_TEXT_WHITE, "PIXEL MOTION");
-        if (m_fontTitle) ImGui::PopFont();
-        
-        // Subtitle badge
-        draw_list->AddRectFilled(
-            ImVec2(win_pos.x + 200, win_pos.y + 20),
-            ImVec2(win_pos.x + 258, win_pos.y + 42),
-            IM_COL32(227, 46, 79, 35), 6.0f
-        );
-        draw_list->AddText(ImVec2(win_pos.x + 209, win_pos.y + 23), COL_PRIMARY_HOVER, "v1.2.0");
+        // Brand Logo Image & Title
+        if (m_logoSRV) {
+            float logo_size = 32.0f;
+            float logo_y = win_pos.y + (header_height - logo_size) * 0.5f;
+            draw_list->AddImage(
+                (ImTextureID)m_logoSRV.Get(),
+                ImVec2(win_pos.x + 20, logo_y),
+                ImVec2(win_pos.x + 20 + logo_size, logo_y + logo_size)
+            );
+            
+            if (m_fontTitle) ImGui::PushFont(m_fontTitle);
+            draw_list->AddText(ImVec2(win_pos.x + 60, win_pos.y + 18), COL_TEXT_WHITE, "PIXEL MOTION");
+            if (m_fontTitle) ImGui::PopFont();
+            
+            // Subtitle badge
+            draw_list->AddRectFilled(
+                ImVec2(win_pos.x + 218, win_pos.y + 20),
+                ImVec2(win_pos.x + 276, win_pos.y + 42),
+                IM_COL32(227, 46, 79, 35), 6.0f
+            );
+            draw_list->AddText(ImVec2(win_pos.x + 227, win_pos.y + 23), COL_PRIMARY_HOVER, "v1.2.1");
+        } else {
+            draw_list->AddCircleFilled(ImVec2(win_pos.x + 28, win_pos.y + header_height * 0.5f), 5.0f, COL_PRIMARY_RED);
+            
+            if (m_fontTitle) ImGui::PushFont(m_fontTitle);
+            draw_list->AddText(ImVec2(win_pos.x + 42, win_pos.y + 18), COL_TEXT_WHITE, "PIXEL MOTION");
+            if (m_fontTitle) ImGui::PopFont();
+            
+            // Subtitle badge
+            draw_list->AddRectFilled(
+                ImVec2(win_pos.x + 200, win_pos.y + 20),
+                ImVec2(win_pos.x + 258, win_pos.y + 42),
+                IM_COL32(227, 46, 79, 35), 6.0f
+            );
+            draw_list->AddText(ImVec2(win_pos.x + 209, win_pos.y + 23), COL_PRIMARY_HOVER, "v1.2.1");
+        }
 
         // Subtle header bottom line
         draw_list->AddLine(

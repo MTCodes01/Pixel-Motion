@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(PixelMotion VERSION 1.2.0 LANGUAGES CXX)
+project(PixelMotion VERSION 1.2.1 LANGUAGES CXX)
 
 # C++20 standard required
 set(CMAKE_CXX_STANDARD 20)
@@ -186,12 +186,15 @@ compile_shader(
     PSMain
 )
 
-# Copy compiled shaders to output directory
+# Copy compiled shaders and assets to output directory
 add_custom_command(TARGET PixelMotion POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${CMAKE_BINARY_DIR}/shaders"
         "$<TARGET_FILE_DIR:PixelMotion>/shaders"
-    COMMENT "Copying shaders to output directory"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/src/ui/logo.png"
+        "$<TARGET_FILE_DIR:PixelMotion>/logo.png"
+    COMMENT "Copying shaders and assets to output directory"
 )
 
 # Installation

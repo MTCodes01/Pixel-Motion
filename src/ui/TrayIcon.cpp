@@ -1,4 +1,5 @@
 #include "TrayIcon.h"
+#include "resource.h"
 #include "Application.h"
 #include "core/Logger.h"
 #include "resources/ResourceManager.h"
@@ -57,7 +58,13 @@ bool TrayIcon::Initialize() {
     m_nid.uID = 1;
     m_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     m_nid.uCallbackMessage = WM_TRAYICON;
-    m_nid.hIcon = LoadIcon(nullptr, IDI_APPLICATION); // TODO: Load custom icon
+    
+    // Load custom application icon
+    HINSTANCE hInst = GetModuleHandle(nullptr);
+    m_nid.hIcon = LoadIcon(hInst, MAKEINTRESOURCE(IDI_APP_ICON));
+    if (!m_nid.hIcon) {
+        m_nid.hIcon = LoadIcon(nullptr, IDI_APPLICATION);
+    }
     wcscpy_s(m_nid.szTip, ARRAYSIZE(m_nid.szTip), L"Pixel Motion");
 
     if (!Shell_NotifyIcon(NIM_ADD, &m_nid)) {
