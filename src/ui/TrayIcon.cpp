@@ -111,6 +111,9 @@ LRESULT CALLBACK TrayIcon::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
             if (tray) {
                 tray->ShowContextMenu();
             }
+        } else if (lParam == WM_LBUTTONUP || lParam == WM_LBUTTONDBLCLK) {
+            Logger::Info("Tray icon clicked - opening settings");
+            Application::GetInstance().ShowSettings();
         }
         return 0;
     }
@@ -142,6 +145,7 @@ void TrayIcon::ShowContextMenu() {
     SetForegroundWindow(m_hwnd);
     TrackPopupMenu(hMenu, TPM_BOTTOMALIGN | TPM_LEFTALIGN,
         pt.x, pt.y, 0, m_hwnd, nullptr);
+    PostMessage(m_hwnd, WM_NULL, 0, 0);
     DestroyMenu(hMenu);
 }
 

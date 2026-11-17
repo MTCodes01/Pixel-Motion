@@ -1,6 +1,7 @@
 #include "DX11Device.h"
 #include "core/Logger.h"
 
+#include <d3d10.h>
 #include <dxgi1_2.h>
 
 namespace PixelMotion {
@@ -43,6 +44,13 @@ bool DX11Device::Initialize() {
     if (FAILED(hr)) {
         Logger::Error("Failed to create D3D11 device");
         return false;
+    }
+
+    // Enable multithread protection on the immediate context for safe FFmpeg D3D11VA hwaccel interaction
+    ComPtr<ID3D10Multithread> multithread;
+    if (SUCCEEDED(m_context.As(&multithread)) && multithread) {
+        multithread->SetMultithreadProtected(TRUE);
+        Logger::Info("Direct3D 11 multithread protection enabled");
     }
 
     // Get DXGI factory

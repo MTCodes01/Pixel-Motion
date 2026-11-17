@@ -102,9 +102,6 @@ bool VideoDecoder::Initialize(const std::wstring& filePath, ID3D11Device* device
     m_initialized = true;
     Logger::Info("Video decoder initialized successfully");
 
-    // Immediate working set trim to release startup allocations back to OS
-    SetProcessWorkingSetSize(GetCurrentProcess(), (SIZE_T)-1, (SIZE_T)-1);
-
     return true;
 }
 
@@ -366,14 +363,15 @@ bool VideoDecoder::InitializeDecoder(ID3D11Device* device) {
         return false;
     }
 
-    // Use a lightweight thread count for software fallback while letting D3D11VA hardware decode manage its pipeline
-    m_codecContext->thread_count = 2;
-
     // For images, skip hardware acceleration (not supported)
     // For videos, try to use hardware acceleration
     if (!m_isImage && device) {
+        // Single thread for D3D11VA avoids D3D11 immediate context contention while GPU ASIC handles decoding
+        m_codecContext->thread_count = 1;
+
         if (!SetupHardwareAcceleration(device)) {
             Logger::Warning("Hardware acceleration setup failed, falling back to software decoding");
+            m_codecContext->thread_count = 2; // Allow 2 threads for software fallback
         }
         
         // Set pixel format callback to prefer hardware formats for videos
@@ -488,12 +486,7 @@ bool VideoDecoder::DecodeNextFrame() {
             continue;
         }
 
-        // Unreference prior frame to release buffers immediately
-        if (m_frame) {
-            av_frame_unref(m_frame);
-        }
-
-        // Receive decoded frame
+        // Receive decoded frame (avcodec_receive_frame internally unrefs prior frame per API spec)
         ret = avcodec_receive_frame(m_codecContext, m_frame);
         
         if (ret == AVERROR(EAGAIN)) {

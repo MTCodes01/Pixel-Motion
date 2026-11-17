@@ -9,6 +9,28 @@
 
 namespace PixelMotion {
 
+// Safe blit wrapper protected with structured exception handling (__try/__except)
+// This shields the entire application if an underlying display driver (e.g. amdxx64.dll)
+// experiences an internal driver access violation (0xc0000005) during hardware video processing.
+static bool SafeVideoProcessorBlt(
+    ID3D11VideoContext* videoContext,
+    ID3D11VideoProcessor* videoProcessor,
+    ID3D11VideoProcessorOutputView* outputView,
+    ID3D11VideoProcessorInputView* inputView)
+{
+    __try {
+        D3D11_VIDEO_PROCESSOR_STREAM stream = {};
+        stream.Enable = TRUE;
+        stream.pInputSurface = inputView;
+
+        HRESULT hr = videoContext->VideoProcessorBlt(videoProcessor, outputView, 0, 1, &stream);
+        return SUCCEEDED(hr);
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
 // Simple vertex structure
 struct Vertex {
     float position[3];
@@ -461,6 +483,9 @@ void RendererContext::SetVideoTexture(ID3D11Texture2D* texture, int arrayIndex, 
             return;
         }
         
+        // Set stream frame format to progressive
+        m_videoContext->VideoProcessorSetStreamFrameFormat(m_videoProcessor.Get(), 0, D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE);
+        
         // Set source and destination rectangles to handle padding
         RECT sourceRect = { 0, 0, static_cast<LONG>(contentWidth), static_cast<LONG>(contentHeight) };
         m_videoContext->VideoProcessorSetStreamSourceRect(m_videoProcessor.Get(), 0, TRUE, &sourceRect);
@@ -489,31 +514,35 @@ void RendererContext::SetVideoTexture(ID3D11Texture2D* texture, int arrayIndex, 
     m_videoTexture = m_procRgbaTexture;
     m_videoSRV = m_procRgbaSRV;
     
+    // Guard array slice index against texture dimensions to prevent driver buffer overrun
+    if (arrayIndex < 0 || static_cast<UINT>(arrayIndex) >= texDesc.ArraySize) {
+        arrayIndex = 0;
+    }
+
     // Now convert the NV12 frame to BGRA
     if (m_videoProcessor && m_videoDevice && m_videoContext && m_outputView) {
         D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC inputViewDesc = {};
         inputViewDesc.FourCC = 0;
         inputViewDesc.ViewDimension = D3D11_VPIV_DIMENSION_TEXTURE2D;
         inputViewDesc.Texture2D.MipSlice = 0;
-        inputViewDesc.Texture2D.ArraySlice = arrayIndex;
+        inputViewDesc.Texture2D.ArraySlice = static_cast<UINT>(arrayIndex);
 
         ComPtr<ID3D11VideoProcessorInputView> inputView;
         HRESULT hr = m_videoDevice->CreateVideoProcessorInputView(texture, m_processorEnumerator.Get(), 
                                                                    &inputViewDesc, &inputView);
         
         if (SUCCEEDED(hr) && inputView) {
-            D3D11_VIDEO_PROCESSOR_STREAM stream = {};
-            stream.Enable = TRUE;
-            stream.pInputSurface = inputView.Get();
+            bool bltSuccess = SafeVideoProcessorBlt(
+                m_videoContext.Get(),
+                m_videoProcessor.Get(),
+                m_outputView.Get(),
+                inputView.Get()
+            );
             
-            hr = m_videoContext->VideoProcessorBlt(m_videoProcessor.Get(), 
-                                                    m_outputView.Get(), 
-                                                    0, 1, &stream);
-            
-            if (FAILED(hr)) {
+            if (!bltSuccess) {
                 static bool errorLogged = false;
                 if (!errorLogged) {
-                    Logger::Error("VideoProcessorBlt failed: " + std::to_string(hr));
+                    Logger::Warning("VideoProcessorBlt encountered a driver issue, handled safely");
                     errorLogged = true;
                 }
             }
