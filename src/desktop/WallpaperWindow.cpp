@@ -160,9 +160,11 @@ bool WallpaperWindow::LoadVideo(const std::wstring& videoPath) {
         return false;
     }
 
-    // Update frame interval based on video frame rate
+    // Update frame interval based on video frame rate (cap wallpaper presentation at 30 FPS for optimal battery and low GPU usage)
     double fps = m_videoDecoder->GetFrameRate();
-    if (fps > 0) {
+    if (fps > 30.0) {
+        m_frameInterval = 1.0 / 30.0;
+    } else if (fps > 0) {
         m_frameInterval = 1.0 / fps;
     }
 

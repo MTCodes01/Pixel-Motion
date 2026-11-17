@@ -46,6 +46,7 @@ RendererContext::RendererContext()
     , m_videoHeight(0)
     , m_procWidth(0)
     , m_procHeight(0)
+    , m_lastSourceTexture(nullptr)
     , m_initialized(false)
 {
 }
@@ -122,6 +123,8 @@ void RendererContext::Shutdown() {
         return;
     }
 
+    m_inputViews.clear();
+    m_lastSourceTexture = nullptr;
     m_outputView.Reset();
     m_videoProcessor.Reset();
     m_processorEnumerator.Reset();
@@ -339,7 +342,9 @@ void RendererContext::Render() {
 
 void RendererContext::Present() {
     if (m_swapChain) {
-        m_swapChain->Present(1, 0); // VSync synchronized with DWM desktop compositing
+        // Frame pacing is accurately controlled by the steady_clock timer in WallpaperWindow.
+        // Present(0, 0) avoids GPU VSync spin-wait locks and lets the GPU sleep between frames.
+        m_swapChain->Present(0, 0);
     }
 }
 
@@ -412,6 +417,8 @@ void RendererContext::SetVideoTexture(ID3D11Texture2D* texture, int arrayIndex, 
                      std::to_string(m_procWidth) + "x" + std::to_string(m_procHeight));
         
         // Reset old resources
+        m_inputViews.clear();
+        m_lastSourceTexture = nullptr;
         m_outputView.Reset();
         m_videoProcessor.Reset();
         m_processorEnumerator.Reset();
@@ -519,19 +526,35 @@ void RendererContext::SetVideoTexture(ID3D11Texture2D* texture, int arrayIndex, 
         arrayIndex = 0;
     }
 
+    // Invalidate cached views if hardware texture source pointer changed
+    if (m_lastSourceTexture != texture) {
+        m_inputViews.clear();
+        m_lastSourceTexture = texture;
+    }
+
     // Now convert the NV12 frame to BGRA
     if (m_videoProcessor && m_videoDevice && m_videoContext && m_outputView) {
-        D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC inputViewDesc = {};
-        inputViewDesc.FourCC = 0;
-        inputViewDesc.ViewDimension = D3D11_VPIV_DIMENSION_TEXTURE2D;
-        inputViewDesc.Texture2D.MipSlice = 0;
-        inputViewDesc.Texture2D.ArraySlice = static_cast<UINT>(arrayIndex);
-
+        UINT slice = static_cast<UINT>(arrayIndex);
         ComPtr<ID3D11VideoProcessorInputView> inputView;
-        HRESULT hr = m_videoDevice->CreateVideoProcessorInputView(texture, m_processorEnumerator.Get(), 
-                                                                   &inputViewDesc, &inputView);
+
+        auto it = m_inputViews.find(slice);
+        if (it != m_inputViews.end()) {
+            inputView = it->second;
+        } else {
+            D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC inputViewDesc = {};
+            inputViewDesc.FourCC = 0;
+            inputViewDesc.ViewDimension = D3D11_VPIV_DIMENSION_TEXTURE2D;
+            inputViewDesc.Texture2D.MipSlice = 0;
+            inputViewDesc.Texture2D.ArraySlice = slice;
+
+            HRESULT hr = m_videoDevice->CreateVideoProcessorInputView(texture, m_processorEnumerator.Get(), 
+                                                                       &inputViewDesc, &inputView);
+            if (SUCCEEDED(hr) && inputView) {
+                m_inputViews[slice] = inputView;
+            }
+        }
         
-        if (SUCCEEDED(hr) && inputView) {
+        if (inputView) {
             bool bltSuccess = SafeVideoProcessorBlt(
                 m_videoContext.Get(),
                 m_videoProcessor.Get(),

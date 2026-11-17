@@ -1,5 +1,5 @@
 #define MyAppName "Pixel Motion"
-#define MyAppVersion "1.2.5"
+#define MyAppVersion "1.2.6"
 #define MyAppPublisher "Pixel Motion Project"
 #define MyAppURL "https://github.com/MTCodes01/Pixel-Motion"
 #define MyAppExeName "PixelMotion.exe"

@@ -507,7 +507,7 @@ void SettingsWindow::DrawUI() {
                 ImVec2(win_pos.x + 276, win_pos.y + 42),
                 IM_COL32(227, 46, 79, 35), 6.0f
             );
-            draw_list->AddText(ImVec2(win_pos.x + 227, win_pos.y + 23), COL_PRIMARY_HOVER, "v1.2.5");
+            draw_list->AddText(ImVec2(win_pos.x + 227, win_pos.y + 23), COL_PRIMARY_HOVER, "v1.2.6");
         } else {
             draw_list->AddCircleFilled(ImVec2(win_pos.x + 28, win_pos.y + header_height * 0.5f), 5.0f, COL_PRIMARY_RED);
             
@@ -521,7 +521,7 @@ void SettingsWindow::DrawUI() {
                 ImVec2(win_pos.x + 258, win_pos.y + 42),
                 IM_COL32(227, 46, 79, 35), 6.0f
             );
-            draw_list->AddText(ImVec2(win_pos.x + 209, win_pos.y + 23), COL_PRIMARY_HOVER, "v1.2.5");
+            draw_list->AddText(ImVec2(win_pos.x + 209, win_pos.y + 23), COL_PRIMARY_HOVER, "v1.2.6");
         }
 
         // Subtle header bottom line

@@ -6,6 +6,7 @@
 #include <dxgi1_2.h>
 #include <wrl/client.h>
 #include <memory>
+#include <map>
 
 using Microsoft::WRL::ComPtr;
 
@@ -63,6 +64,8 @@ private:
     ComPtr<ID3D11VideoProcessor> m_videoProcessor;
     ComPtr<ID3D11VideoProcessorEnumerator> m_processorEnumerator;
     ComPtr<ID3D11VideoProcessorOutputView> m_outputView;
+    std::map<UINT, ComPtr<ID3D11VideoProcessorInputView>> m_inputViews;
+    ID3D11Texture2D* m_lastSourceTexture;
     UINT m_procWidth;
     UINT m_procHeight;
 
