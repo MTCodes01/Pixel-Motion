@@ -9,6 +9,8 @@
 
 using Microsoft::WRL::ComPtr;
 
+struct ImFont;
+
 namespace PixelMotion {
 
 class Configuration;
@@ -78,9 +80,14 @@ private:
     int m_scalingMode = 0;
     
     // App detection
-    
     std::vector<std::string> m_blockedApps;
     int m_selectedAppIndex;
+
+    // Fonts & Feedback
+    ImFont* m_fontRegular = nullptr;
+    ImFont* m_fontBold = nullptr;
+    ImFont* m_fontTitle = nullptr;
+    std::string m_statusMessage = "Ready";
 };
 
 } // namespace PixelMotion

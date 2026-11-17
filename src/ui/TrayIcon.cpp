@@ -176,12 +176,17 @@ void TrayIcon::UpdateIcon() {
 }
 
 void TrayIcon::ShowNotification(const std::wstring& title, const std::wstring& message) {
-    m_nid.uFlags = NIF_INFO;
+    // Save original flags and add NIF_INFO for balloon notification
+    UINT savedFlags = m_nid.uFlags;
+    m_nid.uFlags = NIF_INFO | NIF_ICON | NIF_MESSAGE | NIF_TIP;
     wcscpy_s(m_nid.szInfoTitle, ARRAYSIZE(m_nid.szInfoTitle), title.c_str());
     wcscpy_s(m_nid.szInfo, ARRAYSIZE(m_nid.szInfo), message.c_str());
     m_nid.dwInfoFlags = NIIF_INFO;
 
     Shell_NotifyIcon(NIM_MODIFY, &m_nid);
+    
+    // Restore original flags (without NIF_INFO which triggers balloon)
+    m_nid.uFlags = savedFlags;
 }
 
 } // namespace PixelMotion

@@ -340,7 +340,12 @@ void RendererContext::SetVideoTexture(ID3D11Texture2D* texture, int arrayIndex, 
     if (texDesc.Format == DXGI_FORMAT_B8G8R8A8_UNORM || 
         texDesc.Format == DXGI_FORMAT_R8G8B8A8_UNORM) {
         
+        if (m_videoTexture.Get() == texture && m_videoSRV) {
+            return;
+        }
+
         m_videoTexture = texture;
+        m_videoSRV.Reset();
         
         // Create SRV directly on the input texture
         D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};

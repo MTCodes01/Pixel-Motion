@@ -199,7 +199,8 @@ void Application::Update() {
 
 void Application::Render() {
     // Render is handled by individual monitor renderers in DesktopManager
-    if (m_desktopManager && !m_resourceManager->IsPaused()) {
+    bool isPaused = m_resourceManager ? m_resourceManager->IsPaused() : false;
+    if (m_desktopManager && !isPaused) {
         m_desktopManager->Render();
     }
     

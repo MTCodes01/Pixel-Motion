@@ -1,8 +1,9 @@
 #include "VideoDecoder.h"
 #include "core/Logger.h"
 
-#include <codecvt>
-#include <locale>
+#include <Windows.h>
+#include <wincodec.h>
+#include <vector>
 
 extern "C" {
 #include <libavformat/avformat.h>
@@ -45,20 +46,54 @@ bool VideoDecoder::Initialize(const std::wstring& filePath, ID3D11Device* device
         return true;
     }
 
+    // Check if this file has an image extension
+    size_t dotPos = filePath.find_last_of(L".");
+    if (dotPos != std::wstring::npos) {
+        std::wstring ext = filePath.substr(dotPos);
+        for (auto& c : ext) c = towlower(c);
+        if (ext == L".png" || ext == L".jpg" || ext == L".jpeg" || 
+            ext == L".bmp" || ext == L".tiff" || ext == L".tif" || 
+            ext == L".webp" || ext == L".ico" || ext == L".gif") {
+            std::string extNarrow;
+            int eLen = WideCharToMultiByte(CP_UTF8, 0, ext.c_str(), -1, nullptr, 0, nullptr, nullptr);
+            if (eLen > 1) {
+                extNarrow.resize(eLen - 1);
+                WideCharToMultiByte(CP_UTF8, 0, ext.c_str(), -1, &extNarrow[0], eLen, nullptr, nullptr);
+            }
+            Logger::Info("Detected image file (" + extNarrow + "), loading with Windows Imaging Component (WIC)...");
+            if (LoadImageWIC(filePath, device)) {
+                return true;
+            }
+            Logger::Warning("WIC image load failed, falling back to FFmpeg...");
+        }
+    }
+
     Logger::Info("Initializing video decoder...");
 
     if (!OpenFile(filePath)) {
+        // Last-ditch effort: try WIC in case extension was missing or non-standard
+        if (LoadImageWIC(filePath, device)) {
+            return true;
+        }
         Logger::Error("Failed to open video file");
         return false;
     }
 
     if (!FindVideoStream()) {
+        // If FFmpeg didn't find video stream, try WIC
+        if (LoadImageWIC(filePath, device)) {
+            return true;
+        }
         Logger::Error("Failed to find video stream");
         Shutdown();
         return false;
     }
 
     if (!InitializeDecoder(device)) {
+        // If FFmpeg decoder unsupported (like PNG codec ID 61), try WIC
+        if (LoadImageWIC(filePath, device)) {
+            return true;
+        }
         Logger::Error("Failed to initialize decoder");
         Shutdown();
         return false;
@@ -66,6 +101,115 @@ bool VideoDecoder::Initialize(const std::wstring& filePath, ID3D11Device* device
 
     m_initialized = true;
     Logger::Info("Video decoder initialized successfully");
+    return true;
+}
+
+bool VideoDecoder::LoadImageWIC(const std::wstring& filePath, ID3D11Device* device) {
+    if (!device) {
+        Logger::Error("LoadImageWIC: No D3D11 device available");
+        return false;
+    }
+
+    ComPtr<IWICImagingFactory> factory;
+    HRESULT hr = CoCreateInstance(
+        CLSID_WICImagingFactory,
+        nullptr,
+        CLSCTX_INPROC_SERVER,
+        IID_PPV_ARGS(&factory)
+    );
+    if (FAILED(hr)) {
+        Logger::Error("LoadImageWIC: Failed to create WIC factory: " + std::to_string(hr));
+        return false;
+    }
+
+    ComPtr<IWICBitmapDecoder> decoder;
+    hr = factory->CreateDecoderFromFilename(
+        filePath.c_str(),
+        nullptr,
+        GENERIC_READ,
+        WICDecodeMetadataCacheOnDemand,
+        &decoder
+    );
+    if (FAILED(hr)) {
+        Logger::Error("LoadImageWIC: Failed to create decoder from filename: " + std::to_string(hr));
+        return false;
+    }
+
+    ComPtr<IWICBitmapFrameDecode> frame;
+    hr = decoder->GetFrame(0, &frame);
+    if (FAILED(hr)) {
+        Logger::Error("LoadImageWIC: Failed to get frame 0 from image");
+        return false;
+    }
+
+    UINT width = 0, height = 0;
+    hr = frame->GetSize(&width, &height);
+    if (FAILED(hr) || width == 0 || height == 0) {
+        Logger::Error("LoadImageWIC: Invalid image dimensions");
+        return false;
+    }
+
+    ComPtr<IWICFormatConverter> converter;
+    hr = factory->CreateFormatConverter(&converter);
+    if (FAILED(hr)) {
+        Logger::Error("LoadImageWIC: Failed to create format converter");
+        return false;
+    }
+
+    hr = converter->Initialize(
+        frame.Get(),
+        GUID_WICPixelFormat32bppBGRA,
+        WICBitmapDitherTypeNone,
+        nullptr,
+        0.0,
+        WICBitmapPaletteTypeCustom
+    );
+    if (FAILED(hr)) {
+        Logger::Error("LoadImageWIC: Failed to initialize format converter to BGRA");
+        return false;
+    }
+
+    UINT stride = width * 4;
+    UINT bufferSize = stride * height;
+    std::vector<BYTE> pixelBuffer(bufferSize);
+
+    hr = converter->CopyPixels(nullptr, stride, bufferSize, pixelBuffer.data());
+    if (FAILED(hr)) {
+        Logger::Error("LoadImageWIC: Failed to copy pixels from converter");
+        return false;
+    }
+
+    D3D11_TEXTURE2D_DESC texDesc = {};
+    texDesc.Width = width;
+    texDesc.Height = height;
+    texDesc.MipLevels = 1;
+    texDesc.ArraySize = 1;
+    texDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    texDesc.SampleDesc.Count = 1;
+    texDesc.Usage = D3D11_USAGE_DEFAULT;
+    texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+
+    D3D11_SUBRESOURCE_DATA initData = {};
+    initData.pSysMem = pixelBuffer.data();
+    initData.SysMemPitch = stride;
+
+    hr = device->CreateTexture2D(&texDesc, &initData, &m_softwareTexture);
+    if (FAILED(hr)) {
+        Logger::Error("LoadImageWIC: Failed to create D3D11 texture: " + std::to_string(hr));
+        return false;
+    }
+
+    m_device = device;
+    m_width = static_cast<int>(width);
+    m_height = static_cast<int>(height);
+    m_duration = 0.0;
+    m_frameRate = 0.0;
+    m_isImage = true;
+    m_eof = true;
+    m_textureUploaded = true;
+    m_initialized = true;
+
+    Logger::Info("Image loaded successfully with WIC: " + std::to_string(m_width) + "x" + std::to_string(m_height));
     return true;
 }
 
@@ -111,9 +255,16 @@ void VideoDecoder::Shutdown() {
 }
 
 bool VideoDecoder::OpenFile(const std::wstring& filePath) {
-    // Convert wstring to UTF-8 string
-    std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
-    std::string utf8Path = converter.to_bytes(filePath);
+    // Convert wstring to UTF-8 string using WideCharToMultiByte (no deprecated codecvt)
+    int utf8Len = WideCharToMultiByte(CP_UTF8, 0, filePath.c_str(), -1, nullptr, 0, nullptr, nullptr);
+    std::string utf8Path;
+    if (utf8Len > 0) {
+        utf8Path.resize(utf8Len - 1);
+        WideCharToMultiByte(CP_UTF8, 0, filePath.c_str(), -1, &utf8Path[0], utf8Len, nullptr, nullptr);
+    } else {
+        Logger::Error("Failed to convert file path to UTF-8");
+        return false;
+    }
 
     // Open video file
     if (avformat_open_input(&m_formatContext, utf8Path.c_str(), nullptr, nullptr) < 0) {
@@ -289,6 +440,11 @@ bool VideoDecoder::DecodeNextFrame() {
         return false;
     }
 
+    if (m_isImage) {
+        // Image is already loaded into m_softwareTexture
+        return true;
+    }
+
     while (true) {
         // Read packet
         int ret = av_read_frame(m_formatContext, m_packet);
@@ -347,6 +503,10 @@ bool VideoDecoder::DecodeNextFrame() {
 }
 
 ID3D11Texture2D* VideoDecoder::GetFrameTexture() {
+    if (m_isImage && m_softwareTexture) {
+        return m_softwareTexture.Get();
+    }
+
     if (!m_frame || !m_frame->data[0]) {
         return nullptr;
     }
@@ -431,12 +591,14 @@ ID3D11Texture2D* VideoDecoder::GetFrameTexture() {
 
     context->Unmap(m_softwareTexture.Get(), 0);
     context->Release();
-
     m_textureUploaded = true;
     return m_softwareTexture.Get();
 }
 
 int VideoDecoder::GetFrameArrayIndex() {
+    if (m_isImage) {
+        return 0;
+    }
     if (!m_frame || m_frame->format != AV_PIX_FMT_D3D11) {
         return 0;
     }

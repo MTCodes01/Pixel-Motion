@@ -109,8 +109,12 @@ bool WallpaperWindow::Create(HWND parentWorkerW, const MonitorInfo& monitor) {
         return false;
     }
 
-    std::wstring wDeviceName = monitor.deviceName;
-    std::string deviceName(wDeviceName.begin(), wDeviceName.end());
+    std::string deviceName;
+    int len = WideCharToMultiByte(CP_UTF8, 0, monitor.deviceName.c_str(), -1, nullptr, 0, nullptr, nullptr);
+    if (len > 1) {
+        deviceName.resize(len - 1);
+        WideCharToMultiByte(CP_UTF8, 0, monitor.deviceName.c_str(), -1, &deviceName[0], len, nullptr, nullptr);
+    }
     Logger::Info("Created wallpaper window for monitor: " + deviceName);
     return true;
 }
@@ -170,10 +174,15 @@ bool WallpaperWindow::LoadVideo(const std::wstring& videoPath) {
     }
 
     m_lastFrameTime = std::chrono::steady_clock::now();
+    m_needsRepaint = true;
 
-    std::wstring wPath = videoPath;
-    std::string path(wPath.begin(), wPath.end());
-    Logger::Info("Video loaded successfully: " + path);
+    std::string path;
+    int pathLen = WideCharToMultiByte(CP_UTF8, 0, videoPath.c_str(), -1, nullptr, 0, nullptr, nullptr);
+    if (pathLen > 1) {
+        path.resize(pathLen - 1);
+        WideCharToMultiByte(CP_UTF8, 0, videoPath.c_str(), -1, &path[0], pathLen, nullptr, nullptr);
+    }
+    Logger::Info("Wallpaper media loaded successfully: " + path);
     return true;
 }
 
@@ -220,7 +229,9 @@ LRESULT CALLBACK WallpaperWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LP
         case WM_PAINT: {
             PAINTSTRUCT ps;
             BeginPaint(hwnd, &ps);
-            // Rendering is handled separately
+            if (window) {
+                window->m_needsRepaint = true;
+            }
             EndPaint(hwnd, &ps);
             return 0;
         }
@@ -296,6 +307,7 @@ void WallpaperWindow::Render() {
 void WallpaperWindow::SetScalingMode(int mode) {
     if (m_renderer) {
         m_renderer->SetScalingMode(mode);
+        m_needsRepaint = true;
     }
 }
 

@@ -47,6 +47,7 @@ public:
     void Reset(); // Seek to beginning
 
 private:
+    bool LoadImageWIC(const std::wstring& filePath, ID3D11Device* device);
     bool OpenFile(const std::wstring& filePath);
     bool FindVideoStream();
     bool InitializeDecoder(ID3D11Device* device);

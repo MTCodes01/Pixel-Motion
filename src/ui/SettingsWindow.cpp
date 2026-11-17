@@ -75,8 +75,8 @@ bool SettingsWindow::Initialize() {
     // Calculate center of screen
     int screenW = GetSystemMetrics(SM_CXSCREEN);
     int screenH = GetSystemMetrics(SM_CYSCREEN);
-    int winW = 800;
-    int winH = 600;
+    int winW = 880;
+    int winH = 640;
     int x = (screenW - winW) / 2;
     int y = (screenH - winH) / 2;
 
@@ -151,63 +151,83 @@ bool SettingsWindow::InitializeImGui() {
     ImGuiIO& io = ImGui::GetIO(); (void)io;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
-    // --- Japanese Festival Theme ---
+    // Load High-Quality Segoe UI Fonts for Windows
+    if (std::filesystem::exists("C:\\Windows\\Fonts\\segoeui.ttf")) {
+        m_fontRegular = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\segoeui.ttf", 17.0f);
+    }
+    if (std::filesystem::exists("C:\\Windows\\Fonts\\segoeuib.ttf")) {
+        m_fontBold = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\segoeuib.ttf", 18.0f);
+        m_fontTitle = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\segoeuib.ttf", 22.0f);
+    }
+    if (!m_fontRegular) m_fontRegular = io.Fonts->AddFontDefault();
+    if (!m_fontBold)    m_fontBold = m_fontRegular;
+    if (!m_fontTitle)   m_fontTitle = m_fontRegular;
+
+    // --- Sleek Fluent Dark Theme ---
     ImGuiStyle& style = ImGui::GetStyle();
     ImVec4* colors = style.Colors;
 
-    // Soft Pink/Purple Background
-    colors[ImGuiCol_WindowBg]       = ImVec4(1.00f, 0.86f, 0.90f, 1.00f); // Soft pink
-    colors[ImGuiCol_ChildBg]        = ImVec4(1.00f, 1.00f, 1.00f, 0.90f); // White cards
-    colors[ImGuiCol_PopupBg]        = ImVec4(1.00f, 0.95f, 0.97f, 1.00f);
+    const ImVec4 bgWindow       = ImVec4(0.09f, 0.10f, 0.13f, 1.00f); // #171A21 Deep Dark
+    const ImVec4 bgCard         = ImVec4(0.13f, 0.14f, 0.18f, 1.00f); // #21242E Elevated Surface
+    const ImVec4 bgPopup        = ImVec4(0.14f, 0.16f, 0.20f, 0.98f); // #242933
+    const ImVec4 borderSubtle   = ImVec4(0.22f, 0.25f, 0.32f, 0.70f); // #384052
     
-    // Dark Text
-    colors[ImGuiCol_Text]           = ImVec4(0.16f, 0.16f, 0.16f, 1.00f);
-    colors[ImGuiCol_TextDisabled]   = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
+    const ImVec4 textPrimary    = ImVec4(0.95f, 0.96f, 0.98f, 1.00f); // #F2F5FA Crisp White
+    const ImVec4 textMuted      = ImVec4(0.60f, 0.65f, 0.72f, 1.00f); // #99A6B8 Slate
+    
+    const ImVec4 accentCrimson  = ImVec4(0.89f, 0.18f, 0.31f, 1.00f); // #E32E4F Radiant Crimson
+    const ImVec4 accentHover    = ImVec4(0.98f, 0.27f, 0.40f, 1.00f); // #FA4566
+    const ImVec4 accentActive   = ImVec4(0.75f, 0.12f, 0.23f, 1.00f); // #BF1F3B
+    const ImVec4 inputFieldBg   = ImVec4(0.08f, 0.09f, 0.11f, 0.85f); // #14171C
 
-    // Borders
-    colors[ImGuiCol_Border]         = ImVec4(0.77f, 0.12f, 0.23f, 0.30f); // Red tint
-    colors[ImGuiCol_BorderShadow]   = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+    colors[ImGuiCol_WindowBg]             = bgWindow;
+    colors[ImGuiCol_ChildBg]              = bgCard;
+    colors[ImGuiCol_PopupBg]              = bgPopup;
+    colors[ImGuiCol_Border]               = borderSubtle;
+    colors[ImGuiCol_BorderShadow]         = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
 
-    // Headers & Accents (Festival Red)
-    colors[ImGuiCol_Header]         = ImVec4(0.77f, 0.12f, 0.23f, 0.40f);
-    colors[ImGuiCol_HeaderHovered]  = ImVec4(0.77f, 0.12f, 0.23f, 0.60f);
-    colors[ImGuiCol_HeaderActive]   = ImVec4(0.77f, 0.12f, 0.23f, 0.80f);
+    colors[ImGuiCol_Text]                 = textPrimary;
+    colors[ImGuiCol_TextDisabled]         = textMuted;
 
-    // Buttons (Bold Red)
-    colors[ImGuiCol_Button]         = ImVec4(0.77f, 0.12f, 0.23f, 1.00f);
-    colors[ImGuiCol_ButtonHovered]  = ImVec4(0.87f, 0.22f, 0.33f, 1.00f);
-    colors[ImGuiCol_ButtonActive]   = ImVec4(0.67f, 0.02f, 0.13f, 1.00f);
+    colors[ImGuiCol_Header]               = ImVec4(accentCrimson.x, accentCrimson.y, accentCrimson.z, 0.25f);
+    colors[ImGuiCol_HeaderHovered]        = ImVec4(accentCrimson.x, accentCrimson.y, accentCrimson.z, 0.45f);
+    colors[ImGuiCol_HeaderActive]         = ImVec4(accentCrimson.x, accentCrimson.y, accentCrimson.z, 0.70f);
 
-    // Frame/Inputs
-    colors[ImGuiCol_FrameBg]        = ImVec4(1.00f, 1.00f, 1.00f, 0.80f);
-    colors[ImGuiCol_FrameBgHovered] = ImVec4(1.00f, 1.00f, 1.00f, 0.95f);
-    colors[ImGuiCol_FrameBgActive]  = ImVec4(0.95f, 0.95f, 0.95f, 1.00f);
+    colors[ImGuiCol_Button]               = accentCrimson;
+    colors[ImGuiCol_ButtonHovered]        = accentHover;
+    colors[ImGuiCol_ButtonActive]         = accentActive;
 
-    // Scrollbar
-    colors[ImGuiCol_ScrollbarBg]    = ImVec4(1.00f, 0.86f, 0.90f, 0.00f);
-    colors[ImGuiCol_ScrollbarGrab]  = ImVec4(0.77f, 0.12f, 0.23f, 0.30f);
-    colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.77f, 0.12f, 0.23f, 0.50f);
-    colors[ImGuiCol_ScrollbarGrabActive]  = ImVec4(0.77f, 0.12f, 0.23f, 0.70f);
+    colors[ImGuiCol_FrameBg]              = inputFieldBg;
+    colors[ImGuiCol_FrameBgHovered]       = ImVec4(0.16f, 0.18f, 0.23f, 1.00f);
+    colors[ImGuiCol_FrameBgActive]        = ImVec4(0.20f, 0.23f, 0.29f, 1.00f);
 
-    // Checkmark/Slider (Festival Red)
-    colors[ImGuiCol_CheckMark]      = ImVec4(0.77f, 0.12f, 0.23f, 1.00f);
-    colors[ImGuiCol_SliderGrab]     = ImVec4(0.77f, 0.12f, 0.23f, 1.00f);
-    colors[ImGuiCol_SliderGrabActive] = ImVec4(0.87f, 0.22f, 0.33f, 1.00f);
+    colors[ImGuiCol_ScrollbarBg]          = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+    colors[ImGuiCol_ScrollbarGrab]        = ImVec4(0.35f, 0.39f, 0.47f, 0.40f);
+    colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.45f, 0.50f, 0.60f, 0.70f);
+    colors[ImGuiCol_ScrollbarGrabActive]  = accentCrimson;
 
-    // Style Rules
-    style.WindowRounding    = 0.0f; // Sharp corners for paper feel
-    style.ChildRounding     = 0.0f;
-    style.FrameRounding     = 0.0f;
-    style.GrabRounding      = 0.0f;
-    style.PopupRounding     = 0.0f;
-    style.ScrollbarRounding = 0.0f;
+    colors[ImGuiCol_CheckMark]            = accentCrimson;
+    colors[ImGuiCol_SliderGrab]           = accentCrimson;
+    colors[ImGuiCol_SliderGrabActive]     = accentHover;
+    colors[ImGuiCol_Separator]            = borderSubtle;
+
+    // Modern Rounding & Dimensions
+    style.WindowRounding    = 10.0f;
+    style.ChildRounding     = 8.0f;
+    style.FrameRounding     = 6.0f;
+    style.GrabRounding      = 4.0f;
+    style.PopupRounding     = 8.0f;
+    style.ScrollbarRounding = 6.0f;
+    style.ScrollbarSize     = 8.0f;
 
     style.WindowBorderSize  = 1.0f;
+    style.ChildBorderSize   = 1.0f;
     style.FrameBorderSize   = 1.0f;
     style.PopupBorderSize   = 1.0f;
 
-    style.ItemSpacing       = ImVec2(8, 6);
-    style.WindowPadding     = ImVec2(12, 12);
+    style.ItemSpacing       = ImVec2(10, 8);
+    style.FramePadding      = ImVec2(10, 8);
+    style.WindowPadding     = ImVec2(16, 16);
 
     // Setup Platform/Renderer backends
     ImGui_ImplWin32_Init(m_hwnd);
@@ -234,15 +254,24 @@ LRESULT CALLBACK SettingsWindow::WindowProc(HWND hwnd, UINT msg, WPARAM wParam, 
         case WM_CLOSE:
             window->Hide(); // Don't destroy, just hide
             return 0;
+        case WM_SIZE:
+            // Handle window resize: recreate DX11 render target
+            if (window->m_swapChain && wParam != SIZE_MINIMIZED) {
+                window->m_mainRenderTargetView.Reset();
+                window->m_swapChain->ResizeBuffers(0, 0, 0, DXGI_FORMAT_UNKNOWN, 0);
+                ID3D11Texture2D* pBackBuffer = nullptr;
+                window->m_swapChain->GetBuffer(0, IID_PPV_ARGS(&pBackBuffer));
+                if (pBackBuffer) {
+                    window->m_device->CreateRenderTargetView(pBackBuffer, nullptr, &window->m_mainRenderTargetView);
+                    pBackBuffer->Release();
+                }
+            }
+            return 0;
         case WM_SYSCOMMAND:
             if ((wParam & 0xfff0) == SC_KEYMENU) // Disable ALT application menu
                 return 0;
             break;
         case WM_DPICHANGED:
-            if (ImGui::GetIO().ConfigFlags) { // & ImGuiConfigFlags_DpiEnableScaleViewports) {
-                //const RECT* suggested_rect = (RECT*)lParam;
-                //SetWindowPos(hwnd, nullptr, suggested_rect->left, suggested_rect->top, suggested_rect->right - suggested_rect->left, suggested_rect->bottom - suggested_rect->top, SWP_NOZORDER | SWP_NOACTIVATE);
-            }
             break;
         }
     }
@@ -256,7 +285,6 @@ void SettingsWindow::Show() {
     UpdateWindow(m_hwnd);
     m_visible = true;
     
-    // Refresh monitor list on show
     // Refresh monitor list on show
     if (m_monitorManager) {
         m_monitorManager->Update();
@@ -305,7 +333,7 @@ void SettingsWindow::Render() {
 
     // Rendering
     ImGui::Render();
-    const float clear_color_with_alpha[4] = { 1.00f, 0.86f, 0.90f, 1.00f }; // Soft pink
+    const float clear_color_with_alpha[4] = { 0.09f, 0.10f, 0.13f, 1.00f }; // Deep Charcoal Dark
     m_context->OMSetRenderTargets(1, m_mainRenderTargetView.GetAddressOf(), nullptr);
     m_context->ClearRenderTargetView(m_mainRenderTargetView.Get(), clear_color_with_alpha);
     ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
@@ -313,20 +341,23 @@ void SettingsWindow::Render() {
 }
 
 void SettingsWindow::DrawUI() {
-    // Modern Clean Color Palette
-    const ImU32 COL_GRADIENT_TOP    = IM_COL32(255, 235, 245, 255); // Lighter pink
-    const ImU32 COL_GRADIENT_BOTTOM = IM_COL32(235, 220, 250, 255); // Lighter purple
-    const ImU32 COL_PRIMARY_RED     = IM_COL32(220, 53, 69, 255);   // Modern red
-    const ImU32 COL_PRIMARY_DARK    = IM_COL32(196, 30, 58, 255);   // Darker red
-    const ImU32 COL_CARD_BG         = IM_COL32(255, 255, 255, 250); // White card
-    const ImU32 COL_TEXT_PRIMARY    = IM_COL32(33, 37, 41, 255);    // Dark text
-    const ImU32 COL_TEXT_SECONDARY  = IM_COL32(108, 117, 125, 255); // Gray text
-    const ImU32 COL_TEXT_LIGHT      = IM_COL32(255, 255, 255, 255); // White text
-    const ImU32 COL_HOVER           = IM_COL32(255, 255, 255, 40);  // White overlay
-    const ImU32 COL_SHADOW          = IM_COL32(0, 0, 0, 20);        // Subtle shadow
-    const ImU32 COL_BORDER          = IM_COL32(222, 226, 230, 255); // Light border
+    // Elegant Dark Theme Color Palette
+    const ImU32 COL_BG_DARK         = IM_COL32(19, 21, 26, 255);    // Deep Charcoal Background
+    const ImU32 COL_SIDEBAR_BG      = IM_COL32(15, 17, 21, 255);    // Darker Sidebar
+    const ImU32 COL_HEADER_BG       = IM_COL32(23, 26, 32, 255);    // Header Bar
+    const ImU32 COL_CARD_BG         = IM_COL32(26, 29, 37, 255);    // Card Surface
+    const ImU32 COL_CARD_BORDER     = IM_COL32(42, 47, 60, 255);    // Card Border
     
-    // Setup Window
+    const ImU32 COL_PRIMARY_RED     = IM_COL32(227, 46, 79, 255);   // Crimson Accent
+    const ImU32 COL_PRIMARY_HOVER   = IM_COL32(250, 69, 102, 255);  // Hover Crimson
+    const ImU32 COL_PRIMARY_DARK    = IM_COL32(189, 29, 58, 255);   // Active Crimson
+    
+    const ImU32 COL_TEXT_WHITE      = IM_COL32(248, 250, 252, 255); // White Text
+    const ImU32 COL_TEXT_MUTED      = IM_COL32(148, 163, 184, 255); // Slate Gray Text
+    const ImU32 COL_TEXT_HINT       = IM_COL32(100, 116, 139, 255); // Muted Hint
+    const ImU32 COL_BORDER_DIVIDER  = IM_COL32(36, 41, 52, 255);    // Divider
+    
+    // Setup Fullscreen ImGui Window
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->WorkPos);
     ImGui::SetNextWindowSize(viewport->WorkSize);
@@ -340,76 +371,88 @@ void SettingsWindow::DrawUI() {
         ImVec2 win_pos = ImGui::GetWindowPos();
         ImVec2 win_size = ImGui::GetWindowSize();
 
-        // === 1. CLEAN GRADIENT BACKGROUND ===
+        // 1. Sleek Gradient Dark Canvas
         draw_list->AddRectFilledMultiColor(
             win_pos, 
             ImVec2(win_pos.x + win_size.x, win_pos.y + win_size.y),
-            COL_GRADIENT_TOP, COL_GRADIENT_TOP, COL_GRADIENT_BOTTOM, COL_GRADIENT_BOTTOM
+            COL_BG_DARK, COL_BG_DARK,
+            IM_COL32(14, 15, 19, 255), IM_COL32(14, 15, 19, 255)
         );
 
-        // Optional: Very subtle noise overlay (single layer, not pattern)
-        for (int i = 0; i < 100; i++) {
-            float x = win_pos.x + (rand() % (int)win_size.x);
-            float y = win_pos.y + (rand() % (int)win_size.y);
-            draw_list->AddCircleFilled(ImVec2(x, y), 1.0f, IM_COL32(255, 255, 255, 10), 4);
-        }
-
-        // === 2. MODERN HEADER BAR ===
-        float header_height = 70.0f;
+        // 2. Modern Header Bar
+        float header_height = 62.0f;
         draw_list->AddRectFilled(
             win_pos,
             ImVec2(win_pos.x + win_size.x, win_pos.y + header_height),
-            COL_PRIMARY_RED
+            COL_HEADER_BG
         );
         
-        // Clean title (no shadows)
-        const char* title = "PIXEL MOTION SETTINGS";
-        ImFont* font = ImGui::GetFont();
-        float font_size = 20.0f;
-        ImVec2 title_pos = ImVec2(win_pos.x + 30, win_pos.y + 25);
-        draw_list->AddText(font, font_size, title_pos, COL_TEXT_LIGHT, title);
+        // Brand Accent Dot & Title
+        draw_list->AddCircleFilled(ImVec2(win_pos.x + 28, win_pos.y + header_height * 0.5f), 5.0f, COL_PRIMARY_RED);
+        
+        if (m_fontTitle) ImGui::PushFont(m_fontTitle);
+        draw_list->AddText(ImVec2(win_pos.x + 42, win_pos.y + 18), COL_TEXT_WHITE, "PIXEL MOTION");
+        if (m_fontTitle) ImGui::PopFont();
+        
+        // Subtitle badge
+        draw_list->AddRectFilled(
+            ImVec2(win_pos.x + 200, win_pos.y + 20),
+            ImVec2(win_pos.x + 258, win_pos.y + 42),
+            IM_COL32(227, 46, 79, 35), 6.0f
+        );
+        draw_list->AddText(ImVec2(win_pos.x + 209, win_pos.y + 23), COL_PRIMARY_HOVER, "v1.2.0");
 
-        // Subtle separator line
+        // Subtle header bottom line
         draw_list->AddLine(
             ImVec2(win_pos.x, win_pos.y + header_height),
             ImVec2(win_pos.x + win_size.x, win_pos.y + header_height),
-            IM_COL32(255, 255, 255, 30),
-            2.0f
+            COL_BORDER_DIVIDER, 1.0f
         );
 
-        // Draggable title bar
+        // Draggable Titlebar Area
         ImGui::SetCursorPos(ImVec2(0, 0));
-        ImGui::InvisibleButton("##TitleBarDrag", ImVec2(win_size.x - 50, header_height));
+        ImGui::InvisibleButton("##TitleBarDrag", ImVec2(win_size.x - 55, header_height));
         if (ImGui::IsItemActive()) {
             SendMessage(m_hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
         }
 
-        // Modern close button
-        ImGui::SetCursorPos(ImVec2(win_size.x - 45, 20));
-        ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_LIGHT);
-        ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(0, 0, 0, 0));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(255, 255, 255, 30));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, IM_COL32(255, 255, 255, 50));
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
-        if (ImGui::Button("✕", ImVec2(35, 35))) {
+        // Modern Close Button ("X" - clean ASCII, no unicode '?' box)
+        ImGui::SetCursorPos(ImVec2(win_size.x - 46, 15));
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+        ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(36, 40, 50, 0));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(227, 46, 79, 200));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, IM_COL32(189, 29, 58, 255));
+        ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_WHITE);
+        
+        if (m_fontBold) ImGui::PushFont(m_fontBold);
+        if (ImGui::Button("X", ImVec2(32, 32))) {
             Hide();
         }
-        ImGui::PopStyleVar();
+        if (m_fontBold) ImGui::PopFont();
+        
         ImGui::PopStyleColor(4);
+        ImGui::PopStyleVar();
 
-        // === 3. CLEAN SIDEBAR ===
+        // 3. Modern Dark Sidebar (Displays)
         float sidebar_width = 220.0f;
         ImVec2 sidebar_p1 = ImVec2(win_pos.x, win_pos.y + header_height);
         ImVec2 sidebar_p2 = ImVec2(win_pos.x + sidebar_width, win_pos.y + win_size.y);
         
-        draw_list->AddRectFilled(sidebar_p1, sidebar_p2, COL_PRIMARY_RED);
+        draw_list->AddRectFilled(sidebar_p1, sidebar_p2, COL_SIDEBAR_BG);
+        draw_list->AddLine(
+            ImVec2(win_pos.x + sidebar_width, win_pos.y + header_height),
+            ImVec2(win_pos.x + sidebar_width, win_pos.y + win_size.y),
+            COL_BORDER_DIVIDER, 1.0f
+        );
         
-        // Sidebar content
-        ImGui::SetCursorPos(ImVec2(20, header_height + 30));
+        // Sidebar Content
+        ImGui::SetCursorPos(ImVec2(16, header_height + 24));
         ImGui::BeginGroup();
         
-        ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 200, 210, 255));
+        ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_HINT);
+        if (m_fontBold) ImGui::PushFont(m_fontBold);
         ImGui::TextUnformatted("DISPLAYS");
+        if (m_fontBold) ImGui::PopFont();
         ImGui::PopStyleColor();
         
         ImGui::Spacing();
@@ -418,19 +461,30 @@ void SettingsWindow::DrawUI() {
         if (m_monitorManager) {
             int monitorCount = m_monitorManager->GetMonitorCount();
             for (int i = 0; i < monitorCount; i++) {
-                char label[32];
-                sprintf_s(label, "Monitor %d", i + 1);
+                char label[64];
+                auto* mon = m_monitorManager->GetMonitor(i);
+                if (mon) {
+                    sprintf_s(label, "Monitor %d\n%dx%d", i + 1, mon->width, mon->height);
+                } else {
+                    sprintf_s(label, "Monitor %d", i + 1);
+                }
                 
                 bool is_selected = (m_selectedMonitorIndex == i);
                 
-                // Modern button style with smooth hover
                 ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
-                ImGui::PushStyleColor(ImGuiCol_Button, is_selected ? COL_HOVER : IM_COL32(0,0,0,0));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, COL_HOVER);
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, IM_COL32(255, 255, 255, 60));
-                ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_LIGHT);
+                if (is_selected) {
+                    ImGui::PushStyleColor(ImGuiCol_Button, COL_PRIMARY_RED);
+                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, COL_PRIMARY_HOVER);
+                    ImGui::PushStyleColor(ImGuiCol_ButtonActive, COL_PRIMARY_DARK);
+                    ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_WHITE);
+                } else {
+                    ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(24, 27, 34, 255));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(34, 38, 48, 255));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonActive, IM_COL32(40, 45, 58, 255));
+                    ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_MUTED);
+                }
                 
-                if (ImGui::Button(label, ImVec2(180, 44))) {
+                if (ImGui::Button(label, ImVec2(188, 54))) {
                     m_selectedMonitorIndex = i;
                     LoadSettingsForMonitor(i);
                 }
@@ -443,60 +497,51 @@ void SettingsWindow::DrawUI() {
         }
         ImGui::EndGroup();
 
-        // === 4. SPACIOUS CONTENT CARD ===
-        float content_x = sidebar_width + 40;
-        float content_y = header_height + 40;
-        float content_w = win_size.x - sidebar_width - 80;
-        float content_h = win_size.y - header_height - 80;
+        // 4. Main Content Area Card & Dedicated Footer
+        float content_x = sidebar_width + 24.0f;
+        float content_y = header_height + 20.0f;
+        float content_w = win_size.x - content_x - 24.0f;
+        float footer_h = 64.0f;
+        float content_h = win_size.y - content_y - footer_h - 16.0f;
         
         ImVec2 card_p1 = ImVec2(win_pos.x + content_x, win_pos.y + content_y);
         ImVec2 card_p2 = ImVec2(card_p1.x + content_w, card_p1.y + content_h);
         
-        // Soft shadow
-        draw_list->AddRectFilled(
-            ImVec2(card_p1.x + 4, card_p1.y + 4),
-            ImVec2(card_p2.x + 4, card_p2.y + 4),
-            COL_SHADOW,
-            12.0f
-        );
-        
-        // Card background with rounded corners
-        draw_list->AddRectFilled(card_p1, card_p2, COL_CARD_BG, 12.0f);
+        // Card surface with subtle border
+        draw_list->AddRectFilled(card_p1, card_p2, COL_CARD_BG, 10.0f);
+        draw_list->AddRect(card_p1, card_p2, COL_CARD_BORDER, 10.0f);
 
-        // === 5. CONTENT AREA ===
-        ImGui::SetCursorPos(ImVec2(content_x + 40, content_y + 30));
+        // 5. Scrollable Content Area inside Card
+        ImGui::SetCursorPos(ImVec2(content_x + 24, content_y + 18));
+        ImGui::BeginChild("ContentScroll", ImVec2(content_w - 48, content_h - 36), false, ImGuiWindowFlags_NoBackground);
         
-        // Use a child window for scrollable content
-        ImGui::BeginChild("ContentScroll", ImVec2(content_w - 80, content_h - 60), false, ImGuiWindowFlags_NoBackground);
-        
-        ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_PRIMARY);
+        ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_WHITE);
 
         if (m_monitorManager && m_selectedMonitorIndex >= 0) {
             
-            // Section title helper
             auto SectionTitle = [&](const char* text) {
-                ImGui::PushStyleColor(ImGuiCol_Text, COL_PRIMARY_RED);
+                if (m_fontBold) ImGui::PushFont(m_fontBold);
+                ImGui::PushStyleColor(ImGuiCol_Text, COL_PRIMARY_HOVER);
                 ImGui::TextUnformatted(text);
                 ImGui::PopStyleColor();
+                if (m_fontBold) ImGui::PopFont();
                 ImGui::Spacing();
             };
 
-            // Calculate available width for inputs
-            float available_width = content_w - 160; // Account for card padding and margins
-            float input_width = available_width - 120; // Leave room for browse button
-            float list_width = available_width;
+            float available_width = content_w - 72;
+            float input_width = available_width - 110;
 
-            // === WALLPAPER SECTION ===
-            SectionTitle("Wallpaper");
+            // === WALLPAPER MEDIA SECTION ===
+            SectionTitle("Wallpaper Media");
             
-            ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_SECONDARY);
-            ImGui::TextUnformatted("Select a video or image for this display");
+            ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_MUTED);
+            ImGui::TextUnformatted("Select an animated video (MP4, MKV) or high-res image (PNG, JPG, BMP, WebP)");
             ImGui::PopStyleColor();
             ImGui::Spacing();
             
             ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
-            ImGui::PushStyleColor(ImGuiCol_FrameBg, IM_COL32(248, 249, 250, 255));
-            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, IM_COL32(241, 243, 245, 255));
+            ImGui::PushStyleColor(ImGuiCol_FrameBg, IM_COL32(18, 20, 26, 255));
+            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, IM_COL32(24, 27, 35, 255));
             ImGui::SetNextItemWidth(input_width);
             ImGui::InputText("##Path", m_wallpaperPathBuffer, MAX_PATH, ImGuiInputTextFlags_ReadOnly);
             ImGui::PopStyleColor(2);
@@ -504,17 +549,18 @@ void SettingsWindow::DrawUI() {
             
             ImGui::SameLine();
             
-            // Modern button
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
+            // Browse button
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
             ImGui::PushStyleColor(ImGuiCol_Button, COL_PRIMARY_RED);
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, COL_PRIMARY_DARK);
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, IM_COL32(180, 25, 50, 255));
-            ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_LIGHT);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, COL_PRIMARY_HOVER);
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, COL_PRIMARY_DARK);
+            ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_WHITE);
             
-            if (ImGui::Button("Browse", ImVec2(100, 36))) {
+            if (ImGui::Button("Browse...", ImVec2(100, 36))) {
                 std::wstring path = OpenFileDialog();
                 if (!path.empty()) {
                     WideCharToMultiByte(CP_UTF8, 0, path.c_str(), -1, m_wallpaperPathBuffer, MAX_PATH, nullptr, nullptr);
+                    m_statusMessage = "Wallpaper selected. Click Apply to preview.";
                 }
             }
             
@@ -523,61 +569,90 @@ void SettingsWindow::DrawUI() {
 
             ImGui::Spacing();
             ImGui::Spacing();
-            ImGui::Spacing();
 
             // Separator
-            ImGui::PushStyleColor(ImGuiCol_Separator, COL_BORDER);
+            ImGui::PushStyleColor(ImGuiCol_Separator, COL_BORDER_DIVIDER);
             ImGui::Separator();
             ImGui::PopStyleColor();
             
             ImGui::Spacing();
             ImGui::Spacing();
 
-            // === BEHAVIOR SECTION ===
-            SectionTitle("Behavior");
+            // === SCALING SECTION ===
+            SectionTitle("Scaling Mode");
             
-            ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_SECONDARY);
-            ImGui::TextUnformatted("Configure when the wallpaper should pause");
+            ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_MUTED);
+            ImGui::TextUnformatted("Choose how the media adapts to this monitor's resolution");
             ImGui::PopStyleColor();
             ImGui::Spacing();
-            
-            // Modern checkboxes with better spacing
-            ImGui::PushStyleColor(ImGuiCol_CheckMark, COL_PRIMARY_RED);
-            ImGui::Checkbox("Start with Windows", &m_autoStart);
-            ImGui::Spacing();
-            ImGui::Checkbox("Pause on Battery", &m_batteryPause);
-            ImGui::Spacing();
-            ImGui::Checkbox("Pause on Fullscreen", &m_fullscreenPause);
-            ImGui::PopStyleColor();
 
-            ImGui::Spacing();
+            const char* scalingItems[] = { 
+                "Fill (Crop to cover entire screen)", 
+                "Fit (Letterbox with aspect ratio)", 
+                "Stretch (Fill screen ignoring aspect ratio)", 
+                "Center (Original pixel size, centered)" 
+            };
+            
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+            ImGui::PushStyleColor(ImGuiCol_FrameBg, IM_COL32(18, 20, 26, 255));
+            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, IM_COL32(24, 27, 35, 255));
+            ImGui::PushStyleColor(ImGuiCol_PopupBg, IM_COL32(24, 27, 35, 255));
+            ImGui::SetNextItemWidth(available_width);
+            ImGui::Combo("##Scaling", &m_scalingMode, scalingItems, IM_ARRAYSIZE(scalingItems));
+            ImGui::PopStyleColor(3);
+            ImGui::PopStyleVar();
+
             ImGui::Spacing();
             ImGui::Spacing();
 
             // Separator
-            ImGui::PushStyleColor(ImGuiCol_Separator, COL_BORDER);
+            ImGui::PushStyleColor(ImGuiCol_Separator, COL_BORDER_DIVIDER);
+            ImGui::Separator();
+            ImGui::PopStyleColor();
+            
+            ImGui::Spacing();
+            ImGui::Spacing();
+
+            // === BEHAVIOR & AUTOMATION SECTION ===
+            SectionTitle("Behavior & Automation");
+            
+            ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_MUTED);
+            ImGui::TextUnformatted("Intelligent resource-aware playback pausing");
+            ImGui::PopStyleColor();
+            ImGui::Spacing();
+            
+            ImGui::Checkbox("Start with Windows (Launch on system boot)", &m_autoStart);
+            ImGui::Spacing();
+            ImGui::Checkbox("Pause on Battery (Conserve laptop battery power)", &m_batteryPause);
+            ImGui::Spacing();
+            ImGui::Checkbox("Pause on Fullscreen (Game Mode automatically pauses playback)", &m_fullscreenPause);
+
+            ImGui::Spacing();
+            ImGui::Spacing();
+
+            // Separator
+            ImGui::PushStyleColor(ImGuiCol_Separator, COL_BORDER_DIVIDER);
             ImGui::Separator();
             ImGui::PopStyleColor();
             
             ImGui::Spacing();
             ImGui::Spacing();
             
-            // === BLOCKLIST SECTION ===
+            // === APPLICATION BLOCKLIST SECTION ===
             SectionTitle("Application Blocklist");
             
-            ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_SECONDARY);
-            ImGui::TextUnformatted("Pause wallpaper when these applications are in focus");
+            ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_MUTED);
+            ImGui::TextUnformatted("Pause wallpaper whenever these processes are focused");
             ImGui::PopStyleColor();
             ImGui::Spacing();
             
-            // Modern list box
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
-            ImGui::PushStyleColor(ImGuiCol_FrameBg, IM_COL32(248, 249, 250, 255));
-            ImGui::PushStyleColor(ImGuiCol_Header, IM_COL32(220, 53, 69, 40));
-            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, IM_COL32(220, 53, 69, 60));
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+            ImGui::PushStyleColor(ImGuiCol_FrameBg, IM_COL32(18, 20, 26, 255));
+            ImGui::PushStyleColor(ImGuiCol_Header, IM_COL32(227, 46, 79, 80));
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, IM_COL32(227, 46, 79, 120));
             
-            if (ImGui::BeginListBox("##AppList", ImVec2(list_width, 150))) {
-                for (int i = 0; i < m_blockedApps.size(); i++) {
+            if (ImGui::BeginListBox("##AppList", ImVec2(available_width, 120))) {
+                for (int i = 0; i < (int)m_blockedApps.size(); i++) {
                     const std::string& app = m_blockedApps[i];
                     if (ImGui::Selectable(app.c_str(), m_selectedAppIndex == i)) {
                         m_selectedAppIndex = i;
@@ -591,16 +666,14 @@ void SettingsWindow::DrawUI() {
             
             ImGui::Spacing();
             
-            // Action buttons
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
+            // Action buttons for blocklist
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+            ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(32, 36, 46, 255));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(42, 47, 60, 255));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, IM_COL32(50, 56, 72, 255));
+            ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_WHITE);
             
-            // Add button
-            ImGui::PushStyleColor(ImGuiCol_Button, COL_PRIMARY_RED);
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, COL_PRIMARY_DARK);
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, IM_COL32(180, 25, 50, 255));
-            ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_LIGHT);
-            
-            if (ImGui::Button("+ Add Application", ImVec2(150, 36))) {
+            if (ImGui::Button("+ Add Executable...", ImVec2(160, 34))) {
                 std::wstring exePath = OpenFileDialog();
                 if (!exePath.empty()) {
                     size_t lastSlash = exePath.find_last_of(L"\\/");
@@ -621,18 +694,10 @@ void SettingsWindow::DrawUI() {
                 }
             }
             
-            ImGui::PopStyleColor(4);
-            
             ImGui::SameLine();
             
-            // Remove button (secondary style)
-            ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(248, 249, 250, 255));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(233, 236, 239, 255));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, IM_COL32(222, 226, 230, 255));
-            ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_PRIMARY);
-            
-            if (ImGui::Button("Remove", ImVec2(100, 36))) {
-                if (m_selectedAppIndex >= 0 && m_selectedAppIndex < m_blockedApps.size()) {
+            if (ImGui::Button("Remove", ImVec2(100, 34))) {
+                if (m_selectedAppIndex >= 0 && m_selectedAppIndex < (int)m_blockedApps.size()) {
                     m_blockedApps.erase(m_blockedApps.begin() + m_selectedAppIndex);
                     m_selectedAppIndex = -1;
                 }
@@ -641,33 +706,57 @@ void SettingsWindow::DrawUI() {
             ImGui::PopStyleColor(4);
             ImGui::PopStyleVar();
             
-            // Add some bottom padding
-            ImGui::Spacing();
             ImGui::Spacing();
             ImGui::Spacing();
 
         } else {
-            ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_SECONDARY);
-            ImGui::TextUnformatted("Select a display from the sidebar to configure settings");
+            ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_MUTED);
+            ImGui::TextUnformatted("Select a display from the sidebar to configure wallpaper settings.");
             ImGui::PopStyleColor();
         }
 
-        ImGui::PopStyleColor(); // Pop main text color
+        ImGui::PopStyleColor();
         ImGui::EndChild();
         
-        // === 6. FLOATING SAVE BUTTON ===
-        ImGui::SetCursorPos(ImVec2(win_size.x - 160, win_size.y - 80));
+        // 6. Dedicated Bottom Action Footer (Clean Alignment, Zero Overlap)
+        float footer_y = win_size.y - footer_h;
         
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 24.0f);
+        // Status indicator text
+        ImGui::SetCursorPos(ImVec2(content_x, footer_y + 14));
+        ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_MUTED);
+        ImGui::Text("%s", m_statusMessage.c_str());
+        ImGui::PopStyleColor();
+        
+        // Secondary "Apply" Button
+        ImGui::SetCursorPos(ImVec2(win_size.x - 24.0f - 140.0f - 12.0f - 110.0f, footer_y + 8));
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
+        ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(32, 36, 46, 255));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(44, 49, 62, 255));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, IM_COL32(52, 58, 74, 255));
+        ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_WHITE);
+        
+        if (ImGui::Button("Apply", ImVec2(110, 42))) {
+            ApplySettings();
+            m_statusMessage = "Settings applied successfully.";
+        }
+        
+        ImGui::PopStyleColor(4);
+        ImGui::PopStyleVar();
+        
+        // Primary "Save Changes" Button
+        ImGui::SetCursorPos(ImVec2(win_size.x - 24.0f - 140.0f, footer_y + 8));
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
         ImGui::PushStyleColor(ImGuiCol_Button, COL_PRIMARY_RED);
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, COL_PRIMARY_DARK);
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, IM_COL32(180, 25, 50, 255));
-        ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_LIGHT);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, COL_PRIMARY_HOVER);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, COL_PRIMARY_DARK);
+        ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_WHITE);
         
-        if (ImGui::Button("Save Changes", ImVec2(140, 48))) {
+        if (m_fontBold) ImGui::PushFont(m_fontBold);
+        if (ImGui::Button("Save Changes", ImVec2(140, 42))) {
             ApplySettings();
             Hide();
         }
+        if (m_fontBold) ImGui::PopFont();
         
         ImGui::PopStyleColor(4);
         ImGui::PopStyleVar();
@@ -727,7 +816,6 @@ void SettingsWindow::ApplySettings() {
     m_config->SetBatteryAwareEnabled(m_batteryPause);
     m_config->SetStartWithWindows(m_autoStart);
     m_config->SetProcessBlocklist(m_blockedApps);
-    m_config->SetProcessBlocklist(m_blockedApps);
     
     // Persist to disk
     if (m_config->Save()) {
@@ -752,7 +840,7 @@ std::wstring SettingsWindow::OpenFileDialog() {
     ofn.hwndOwner = m_hwnd; // Modal to settings window
     ofn.lpstrFile = szFile;
     ofn.nMaxFile = sizeof(szFile);
-    ofn.lpstrFilter = L"Media Files\0*.mp4;*.mkv;*.avi;*.mov;*.wmv;*.jpg;*.jpeg;*.png;*.bmp\0All Files\0*.*\0";
+    ofn.lpstrFilter = L"Media Files\0*.mp4;*.mkv;*.avi;*.mov;*.wmv;*.jpg;*.jpeg;*.png;*.bmp;*.webp;*.tiff\0All Files\0*.*\0";
     ofn.nFilterIndex = 1;
     ofn.lpstrFileTitle = nullptr;
     ofn.nMaxFileTitle = 0;

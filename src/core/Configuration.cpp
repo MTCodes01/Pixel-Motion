@@ -204,7 +204,7 @@ void Configuration::SetStartupRegistry(bool enable) {
             std::wstring cmd = L"\"" + std::wstring(exePath) + L"\"";
             RegSetValueEx(hKey, valueName, 0, REG_SZ, 
                           reinterpret_cast<const BYTE*>(cmd.c_str()), 
-                          (cmd.length() + 1) * sizeof(wchar_t));
+                          static_cast<DWORD>((cmd.length() + 1) * sizeof(wchar_t)));
         } else {
             RegDeleteValue(hKey, valueName);
         }

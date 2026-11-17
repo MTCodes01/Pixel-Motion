@@ -62,18 +62,21 @@ void DesktopManager::Shutdown() {
 }
 
 bool DesktopManager::FindWorkerW() {
-    // Step 1: Find Progman window
+    // Step 1: Find Progman window (or fallback to GetShellWindow)
     m_progman = FindWindow(L"Progman", nullptr);
     if (!m_progman) {
-        Logger::Error("Failed to find Progman window");
-        return false;
+        m_progman = GetShellWindow();
     }
 
-    Logger::Info("Found Progman window");
+    if (m_progman) {
+        Logger::Info("Found Progman/Shell window");
 
-    // Step 2: Send undocumented message to spawn WorkerW
-    SendMessageTimeout(m_progman, WM_SPAWN_WORKER, 0xD, 0x1,
-        SMTO_NORMAL, 1000, nullptr);
+        // Step 2: Send message to spawn WorkerW
+        SendMessageTimeout(m_progman, WM_SPAWN_WORKER, 0xD, 0x1,
+            SMTO_NORMAL, 1000, nullptr);
+    } else {
+        Logger::Warning("Progman not found via FindWindow/GetShellWindow, checking existing WorkerW windows...");
+    }
 
     // Step 3: Enumerate windows to find WorkerW behind SHELLDLL_DefView
     m_workerW = nullptr;
@@ -123,8 +126,12 @@ bool DesktopManager::CreateWallpaperWindows() {
         auto wallpaperWindow = std::make_unique<WallpaperWindow>();
         
         if (!wallpaperWindow->Create(m_workerW, monitor)) {
-            std::wstring wDeviceName = monitor.deviceName;
-            std::string deviceName(wDeviceName.begin(), wDeviceName.end());
+            std::string deviceName;
+            int len = WideCharToMultiByte(CP_UTF8, 0, monitor.deviceName.c_str(), -1, nullptr, 0, nullptr, nullptr);
+            if (len > 1) {
+                deviceName.resize(len - 1);
+                WideCharToMultiByte(CP_UTF8, 0, monitor.deviceName.c_str(), -1, &deviceName[0], len, nullptr, nullptr);
+            }
             Logger::Error("Failed to create wallpaper window for monitor: " + deviceName);
             continue;
         }
@@ -145,8 +152,12 @@ bool DesktopManager::SetWallpaper(int monitorIndex, const std::wstring& videoPat
         return false;
     }
 
-    std::wstring wPath = videoPath;
-    std::string path(wPath.begin(), wPath.end());
+    std::string path;
+    int pathLen = WideCharToMultiByte(CP_UTF8, 0, videoPath.c_str(), -1, nullptr, 0, nullptr, nullptr);
+    if (pathLen > 1) {
+        path.resize(pathLen - 1);
+        WideCharToMultiByte(CP_UTF8, 0, videoPath.c_str(), -1, &path[0], pathLen, nullptr, nullptr);
+    }
     Logger::Info("Setting wallpaper for monitor " + std::to_string(monitorIndex) + ": " + path);
 
     auto* window = m_wallpaperWindows[monitorIndex].get();
@@ -185,7 +196,12 @@ void DesktopManager::RestoreWallpapers() {
                     // Use SetWallpaper to handle logging and any future logic
                     SetWallpaper(static_cast<int>(i), monitorConfig->wallpaperPath);
                 } else {
-                    std::string pathUtf8(monitorConfig->wallpaperPath.begin(), monitorConfig->wallpaperPath.end());
+                    std::string pathUtf8;
+                    int pLen = WideCharToMultiByte(CP_UTF8, 0, monitorConfig->wallpaperPath.c_str(), -1, nullptr, 0, nullptr, nullptr);
+                    if (pLen > 1) {
+                        pathUtf8.resize(pLen - 1);
+                        WideCharToMultiByte(CP_UTF8, 0, monitorConfig->wallpaperPath.c_str(), -1, &pathUtf8[0], pLen, nullptr, nullptr);
+                    }
                     Logger::Warning("Saved wallpaper path not found: " + pathUtf8);
                 }
             }
@@ -202,6 +218,8 @@ void DesktopManager::Update() {
         
         if (FindWorkerW()) {
             CreateWallpaperWindows();
+            // Restore wallpapers after reattach
+            RestoreWallpapers();
         }
     }
 

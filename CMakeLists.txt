@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(PixelMotion VERSION 1.0.0 LANGUAGES CXX)
+project(PixelMotion VERSION 1.2.0 LANGUAGES CXX)
 
 # C++20 standard required
 set(CMAKE_CXX_STANDARD 20)
@@ -47,6 +47,7 @@ set(WIN_LIBRARIES
     comctl32.lib
     shell32.lib
     psapi.lib
+    windowscodecs.lib
 )
 
 # Source files
@@ -85,6 +86,7 @@ set(UI_SOURCES
     src/ui/TrayIcon.cpp
     src/ui/SettingsWindow.cpp
     src/ui/PixelMotion.rc
+    src/ui/PixelMotion.manifest
 )
 
 # Shader files
