@@ -168,10 +168,10 @@ bool SettingsWindow::LoadLogo() {
     
     std::vector<std::filesystem::path> candidates = {
         appDir / "logo.png",
-        appDir / "logos" / "logo_depth_512.png",
+        appDir / "logos" / "logo_light_512.png",
         appDir / "logos" / "logo_color_512.png",
         std::filesystem::path("d:\\Github\\Pixel-Motion\\src\\ui\\logo.png"),
-        std::filesystem::path("d:\\Github\\Pixel-Motion\\logos\\logo_depth_512.png")
+        std::filesystem::path("d:\\Github\\Pixel-Motion\\logos\\logo_light_512.png")
     };
 
     std::filesystem::path chosen;
