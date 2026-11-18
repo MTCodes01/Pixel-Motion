@@ -6,8 +6,8 @@ IDI_APP_ICON ICON "PixelMotion.ico"
 
 // ===== VERSION INFORMATION =====
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 1,3,3,0
- PRODUCTVERSION 1,3,3,0
+ FILEVERSION 1,3,4,0
+ PRODUCTVERSION 1,3,4,0
  FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
  FILEFLAGS 0x0L
  FILEOS VOS__WINDOWS32
@@ -20,12 +20,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName",      "Pixel Motion Project"
             VALUE "FileDescription",  "Pixel Motion - Animated Wallpaper Engine"
-            VALUE "FileVersion",      "1.3.3.0"
+            VALUE "FileVersion",      "1.3.4.0"
             VALUE "InternalName",     "PixelMotion"
             VALUE "LegalCopyright",   "Copyright (C) 2026"
             VALUE "OriginalFilename", "PixelMotion.exe"
             VALUE "ProductName",      "Pixel Motion"
-            VALUE "ProductVersion",   "1.3.3"
+            VALUE "ProductVersion",   "1.3.4"
         END
     END
     BLOCK "VarFileInfo"

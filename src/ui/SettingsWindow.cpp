@@ -510,7 +510,7 @@ void SettingsWindow::DrawUI() {
                 ImVec2(win_pos.x + 276, win_pos.y + 42),
                 IM_COL32(227, 46, 79, 35), 6.0f
             );
-            draw_list->AddText(ImVec2(win_pos.x + 227, win_pos.y + 23), COL_PRIMARY_HOVER, "v1.3.3");
+            draw_list->AddText(ImVec2(win_pos.x + 227, win_pos.y + 23), COL_PRIMARY_HOVER, "v1.3.4");
         } else {
             draw_list->AddCircleFilled(ImVec2(win_pos.x + 28, win_pos.y + header_height * 0.5f), 5.0f, COL_PRIMARY_RED);
             
@@ -524,7 +524,7 @@ void SettingsWindow::DrawUI() {
                 ImVec2(win_pos.x + 258, win_pos.y + 42),
                 IM_COL32(227, 46, 79, 35), 6.0f
             );
-            draw_list->AddText(ImVec2(win_pos.x + 209, win_pos.y + 23), COL_PRIMARY_HOVER, "v1.3.3");
+            draw_list->AddText(ImVec2(win_pos.x + 209, win_pos.y + 23), COL_PRIMARY_HOVER, "v1.3.4");
         }
 
         // Subtle header bottom line
@@ -536,27 +536,10 @@ void SettingsWindow::DrawUI() {
 
         // Draggable Titlebar Area
         ImGui::SetCursorPos(ImVec2(0, 0));
-        ImGui::InvisibleButton("##TitleBarDrag", ImVec2(win_size.x - 55, header_height));
+        ImGui::InvisibleButton("##TitleBarDrag", ImVec2(win_size.x, header_height));
         if (ImGui::IsItemActive()) {
             SendMessage(m_hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
         }
-
-        // Modern Close Button ("X" - clean ASCII, no unicode '?' box)
-        ImGui::SetCursorPos(ImVec2(win_size.x - 46, 15));
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
-        ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(36, 40, 50, 0));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(227, 46, 79, 200));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, IM_COL32(189, 29, 58, 255));
-        ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_WHITE);
-        
-        if (m_fontBold) ImGui::PushFont(m_fontBold);
-        if (ImGui::Button("X", ImVec2(32, 32))) {
-            Hide();
-        }
-        if (m_fontBold) ImGui::PopFont();
-        
-        ImGui::PopStyleColor(4);
-        ImGui::PopStyleVar();
 
         // 3. Modern Dark Sidebar (Displays)
         float sidebar_width = 220.0f;
