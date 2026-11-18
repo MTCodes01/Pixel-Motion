@@ -138,6 +138,15 @@ void WallpaperWindow::Destroy() {
 bool WallpaperWindow::LoadVideo(const std::wstring& videoPath) {
     Logger::Info("Loading video for wallpaper...");
 
+    // Shut down previous video decoder and release old GPU/RAM resources
+    if (m_videoDecoder) {
+        m_videoDecoder->Shutdown();
+        m_videoDecoder.reset();
+    }
+    if (m_renderer) {
+        m_renderer->ClearVideoResources();
+    }
+
     // Create video decoder
     m_videoDecoder = std::make_unique<VideoDecoder>();
 
@@ -186,6 +195,12 @@ bool WallpaperWindow::LoadVideo(const std::wstring& videoPath) {
     m_lastFrameTime = std::chrono::steady_clock::now();
     m_needsRepaint = true;
 
+    // Immediately present the initial frame
+    Render();
+
+    // Reclaim transient decoding/decompression memory buffers back to the OS immediately
+    SetProcessWorkingSetSize(GetCurrentProcess(), (SIZE_T)-1, (SIZE_T)-1);
+
     std::string path;
     int pathLen = WideCharToMultiByte(CP_UTF8, 0, videoPath.c_str(), -1, nullptr, 0, nullptr, nullptr);
     if (pathLen > 1) {
@@ -198,9 +213,14 @@ bool WallpaperWindow::LoadVideo(const std::wstring& videoPath) {
 
 void WallpaperWindow::UnloadVideo() {
     if (m_videoDecoder) {
+        m_videoDecoder->Shutdown();
         m_videoDecoder.reset();
         Logger::Info("Video unloaded");
     }
+    if (m_renderer) {
+        m_renderer->ClearVideoResources();
+    }
+    SetProcessWorkingSetSize(GetCurrentProcess(), (SIZE_T)-1, (SIZE_T)-1);
 }
 
 bool WallpaperWindow::RegisterWindowClass() {

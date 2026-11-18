@@ -148,6 +148,22 @@ void RendererContext::Shutdown() {
     m_initialized = false;
 }
 
+void RendererContext::ClearVideoResources() {
+    m_videoSRV.Reset();
+    m_videoTexture.Reset();
+    m_inputViews.clear();
+    m_lastSourceTexture = nullptr;
+    m_outputView.Reset();
+    m_videoProcessor.Reset();
+    m_processorEnumerator.Reset();
+    m_videoContext.Reset();
+    m_videoDevice.Reset();
+    m_procRgbaSRV.Reset();
+    m_procRgbaTexture.Reset();
+    m_procWidth = 0;
+    m_procHeight = 0;
+}
+
 bool RendererContext::CreateSwapChain(HWND hwnd, int width, int height) {
     Logger::Info("Creating swap chain for HWND: " + std::to_string(reinterpret_cast<uintptr_t>(hwnd)) + 
                  ", size: " + std::to_string(width) + "x" + std::to_string(height));
@@ -380,6 +396,21 @@ void RendererContext::SetVideoTexture(ID3D11Texture2D* texture, int arrayIndex, 
     if (texDesc.Format == DXGI_FORMAT_B8G8R8A8_UNORM || 
         texDesc.Format == DXGI_FORMAT_R8G8B8A8_UNORM) {
         
+        // Clean up any lingering video processor resources from prior video playback to release GPU/RAM
+        if (m_procRgbaTexture || m_videoProcessor) {
+            m_inputViews.clear();
+            m_lastSourceTexture = nullptr;
+            m_outputView.Reset();
+            m_videoProcessor.Reset();
+            m_processorEnumerator.Reset();
+            m_videoContext.Reset();
+            m_videoDevice.Reset();
+            m_procRgbaSRV.Reset();
+            m_procRgbaTexture.Reset();
+            m_procWidth = 0;
+            m_procHeight = 0;
+        }
+
         if (m_videoTexture.Get() == texture && m_videoSRV) {
             return;
         }

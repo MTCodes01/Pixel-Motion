@@ -215,10 +215,6 @@ bool VideoDecoder::LoadImageWIC(const std::wstring& filePath, ID3D11Device* devi
 }
 
 void VideoDecoder::Shutdown() {
-    if (!m_initialized) {
-        return;
-    }
-
     Logger::Info("Shutting down video decoder...");
 
     if (m_packet) {
@@ -253,6 +249,9 @@ void VideoDecoder::Shutdown() {
     m_softwareTexture.Reset();
     m_device = nullptr;
     m_initialized = false;
+    m_isImage = false;
+    m_width = 0;
+    m_height = 0;
 }
 
 bool VideoDecoder::OpenFile(const std::wstring& filePath) {

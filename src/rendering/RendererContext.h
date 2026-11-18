@@ -30,6 +30,7 @@ public:
     void Present();
 
     void SetVideoTexture(ID3D11Texture2D* texture, int arrayIndex = 0, int contentWidth = 0, int contentHeight = 0);
+    void ClearVideoResources();
     void SetScalingMode(int mode); // 0=Fill, 1=Fit, 2=Stretch, 3=Center
     ID3D11Device* GetDevice();
 

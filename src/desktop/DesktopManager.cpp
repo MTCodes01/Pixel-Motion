@@ -173,7 +173,11 @@ bool DesktopManager::SetWallpaper(int monitorIndex, const std::wstring& videoPat
         }
     }
 
-    return window->LoadVideo(videoPath);
+    bool result = window->LoadVideo(videoPath);
+    if (result) {
+        SetProcessWorkingSetSize(GetCurrentProcess(), (SIZE_T)-1, (SIZE_T)-1);
+    }
+    return result;
 }
 
 void DesktopManager::RestoreWallpapers() {
