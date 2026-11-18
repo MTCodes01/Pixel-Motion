@@ -46,12 +46,17 @@ bool WallpaperWindow::Create(HWND parentWorkerW, const MonitorInfo& monitor) {
     Logger::Info("Monitor absolute: (" + std::to_string(monitor.bounds.left) + ", " + 
                  std::to_string(monitor.bounds.top) + ")");
 
-    // Create window as a popup first (not as child)
+    // Calculate position relative to WorkerW
+    int relativeX = monitor.bounds.left - workerRect.left;
+    int relativeY = monitor.bounds.top - workerRect.top;
+    Logger::Info("Relative position: (" + std::to_string(relativeX) + ", " + std::to_string(relativeY) + ")");
+
+    // Create window initially hidden as popup (without WS_VISIBLE so it never flashes over open apps)
     m_hwnd = CreateWindowEx(
         WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,   // Extended style - no taskbar button
         s_className,                            // Class name
         L"Pixel Motion Wallpaper",             // Window name
-        WS_POPUP | WS_VISIBLE,                 // Popup style
+        WS_POPUP,                              // Popup style (initially hidden)
         monitor.bounds.left,                   // X (screen coords)
         monitor.bounds.top,                    // Y (screen coords)
         monitor.width,                         // Width
@@ -72,7 +77,7 @@ bool WallpaperWindow::Create(HWND parentWorkerW, const MonitorInfo& monitor) {
 
     // Change style to WS_CHILD so it is a true child of WorkerW and stays behind desktop icons
     LONG style = GetWindowLong(m_hwnd, GWL_STYLE);
-    SetWindowLong(m_hwnd, GWL_STYLE, (style & ~WS_POPUP) | WS_CHILD);
+    SetWindowLong(m_hwnd, GWL_STYLE, (style & ~WS_POPUP) | WS_CHILD | WS_CLIPSIBLINGS | WS_CLIPCHILDREN);
 
     // Now attach to WorkerW using SetParent
     HWND oldParent = SetParent(m_hwnd, parentWorkerW);
@@ -86,14 +91,9 @@ bool WallpaperWindow::Create(HWND parentWorkerW, const MonitorInfo& monitor) {
     HWND actualParent = GetAncestor(m_hwnd, GA_PARENT);
     Logger::Info("Actual parent HWND: " + std::to_string(reinterpret_cast<uintptr_t>(actualParent)));
     
-    // Position relative to WorkerW after SetParent
-    int relativeX = monitor.bounds.left - workerRect.left;
-    int relativeY = monitor.bounds.top - workerRect.top;
-    Logger::Info("Relative position: (" + std::to_string(relativeX) + ", " + std::to_string(relativeY) + ")");
-    
-    // Move window to correct position relative to parent
-    SetWindowPos(m_hwnd, nullptr, relativeX, relativeY, monitor.width, monitor.height, 
-                 SWP_NOZORDER | SWP_NOACTIVATE);
+    // Position relative to WorkerW and place at HWND_BOTTOM inside WorkerW
+    SetWindowPos(m_hwnd, HWND_BOTTOM, relativeX, relativeY, monitor.width, monitor.height, 
+                 SWP_NOACTIVATE | SWP_SHOWWINDOW);
     
     // Get window rect
     RECT rect;
@@ -101,8 +101,6 @@ bool WallpaperWindow::Create(HWND parentWorkerW, const MonitorInfo& monitor) {
     Logger::Info("Window rect: (" + std::to_string(rect.left) + ", " + std::to_string(rect.top) + 
                  ", " + std::to_string(rect.right) + ", " + std::to_string(rect.bottom) + ")");
 
-    // Make sure window is visible
-    ShowWindow(m_hwnd, SW_SHOWNOACTIVATE);
     UpdateWindow(m_hwnd);
 
     // Initialize renderer for this window

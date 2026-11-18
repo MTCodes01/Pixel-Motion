@@ -55,6 +55,9 @@ void DesktopManager::Shutdown() {
     Logger::Info("Shutting down Desktop Manager...");
     
     DestroyWallpaperWindows();
+
+    // Refresh desktop wallpaper so default static wallpaper is cleanly restored
+    SystemParametersInfoW(SPI_SETDESKWALLPAPER, 0, nullptr, SPIF_SENDCHANGE);
     
     m_workerW = nullptr;
     m_progman = nullptr;
@@ -74,9 +77,12 @@ bool DesktopManager::FindWorkerW() {
         if (m_progman) {
             Logger::Info("Found Progman/Shell window on attempt " + std::to_string(attempt));
 
-            // Step 2: Send message to spawn WorkerW
+            // Step 2: Send message to spawn the background WorkerW behind desktop icons
+            DWORD_PTR result = 0;
             SendMessageTimeout(m_progman, WM_SPAWN_WORKER, 0xD, 0x1,
-                SMTO_NORMAL, 1000, nullptr);
+                SMTO_NORMAL, 1000, &result);
+            SendMessageTimeout(m_progman, WM_SPAWN_WORKER, 0, 0,
+                SMTO_NORMAL, 1000, &result);
         } else {
             Logger::Warning("Progman not found on attempt " + std::to_string(attempt) + ", checking existing WorkerW windows...");
         }
@@ -85,8 +91,29 @@ bool DesktopManager::FindWorkerW() {
         m_workerW = nullptr;
         EnumWindows(EnumWindowsProc, reinterpret_cast<LPARAM>(this));
 
+        // Fallback: If not found immediately after the icons window in Z-order,
+        // search for any top-level WorkerW that does NOT contain SHELLDLL_DefView
+        if (!m_workerW) {
+            EnumWindows([](HWND hwnd, LPARAM lParam) -> BOOL {
+                auto* manager = reinterpret_cast<DesktopManager*>(lParam);
+                wchar_t className[256] = {0};
+                if (GetClassNameW(hwnd, className, 256) > 0 && wcscmp(className, L"WorkerW") == 0) {
+                    HWND defView = FindWindowEx(hwnd, nullptr, L"SHELLDLL_DefView", nullptr);
+                    if (defView == nullptr) {
+                        manager->m_workerW = hwnd;
+                        Logger::Info("Found WorkerW (fallback without SHELLDLL_DefView), HWND: " +
+                                     std::to_string(reinterpret_cast<uintptr_t>(hwnd)));
+                        return FALSE; // Stop enumeration
+                    }
+                }
+                return TRUE;
+            }, reinterpret_cast<LPARAM>(this));
+        }
+
         if (m_workerW) {
-            Logger::Info("Found WorkerW window on attempt " + std::to_string(attempt));
+            Logger::Info("Found WorkerW window behind desktop icons on attempt " + std::to_string(attempt));
+            ShowWindow(m_workerW, SW_SHOW);
+            UpdateWindow(m_workerW);
             return true;
         }
 
@@ -102,17 +129,17 @@ bool DesktopManager::FindWorkerW() {
 BOOL CALLBACK DesktopManager::EnumWindowsProc(HWND hwnd, LPARAM lParam) {
     auto* manager = reinterpret_cast<DesktopManager*>(lParam);
 
-    // Find WorkerW window that has SHELLDLL_DefView as a child
+    // Look for the top-level window containing SHELLDLL_DefView (the desktop icons)
     HWND defView = FindWindowEx(hwnd, nullptr, L"SHELLDLL_DefView", nullptr);
     if (defView != nullptr) {
-        // This WorkerW contains the desktop icons (SHELLDLL_DefView)
-        // We want to use THIS WorkerW as our parent
-        manager->m_workerW = hwnd;
-        
-        Logger::Info("Found WorkerW with SHELLDLL_DefView, HWND: " + 
-                     std::to_string(reinterpret_cast<uintptr_t>(hwnd)));
-        
-        return FALSE; // Stop enumeration
+        // The WorkerW behind the desktop icons is the WorkerW sibling directly behind this window in Z-order
+        HWND workerBehind = FindWindowEx(nullptr, hwnd, L"WorkerW", nullptr);
+        if (workerBehind != nullptr) {
+            manager->m_workerW = workerBehind;
+            Logger::Info("Found WorkerW sibling behind SHELLDLL_DefView, HWND: " + 
+                         std::to_string(reinterpret_cast<uintptr_t>(workerBehind)));
+            return FALSE; // Stop enumeration
+        }
     }
 
     return TRUE; // Continue enumeration
