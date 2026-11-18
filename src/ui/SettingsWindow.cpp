@@ -507,7 +507,7 @@ void SettingsWindow::DrawUI() {
                 ImVec2(win_pos.x + 276, win_pos.y + 42),
                 IM_COL32(227, 46, 79, 35), 6.0f
             );
-            draw_list->AddText(ImVec2(win_pos.x + 227, win_pos.y + 23), COL_PRIMARY_HOVER, "v1.2.8");
+            draw_list->AddText(ImVec2(win_pos.x + 227, win_pos.y + 23), COL_PRIMARY_HOVER, "v1.2.9");
         } else {
             draw_list->AddCircleFilled(ImVec2(win_pos.x + 28, win_pos.y + header_height * 0.5f), 5.0f, COL_PRIMARY_RED);
             
@@ -521,7 +521,7 @@ void SettingsWindow::DrawUI() {
                 ImVec2(win_pos.x + 258, win_pos.y + 42),
                 IM_COL32(227, 46, 79, 35), 6.0f
             );
-            draw_list->AddText(ImVec2(win_pos.x + 209, win_pos.y + 23), COL_PRIMARY_HOVER, "v1.2.8");
+            draw_list->AddText(ImVec2(win_pos.x + 209, win_pos.y + 23), COL_PRIMARY_HOVER, "v1.2.9");
         }
 
         // Subtle header bottom line
@@ -943,6 +943,19 @@ void SettingsWindow::ApplySettings() {
     wchar_t wPath[MAX_PATH];
     MultiByteToWideChar(CP_UTF8, 0, m_wallpaperPathBuffer, -1, wPath, MAX_PATH);
     
+    // Check if any monitor was currently in Span mode (mode 5)
+    bool wasInSpanMode = false;
+    for (size_t i = 0; i < m_monitorManager->GetMonitorCount(); i++) {
+        auto* mon = m_monitorManager->GetMonitor(static_cast<int>(i));
+        if (mon) {
+            auto* cfg = m_config->GetMonitorConfig(mon->deviceName);
+            if (cfg && cfg->scalingMode == 5) {
+                wasInSpanMode = true;
+                break;
+            }
+        }
+    }
+
     // Create monitor config
     if (m_scalingMode == 5) {
         // Span mode: apply across ALL monitors continuously
@@ -955,6 +968,25 @@ void SettingsWindow::ApplySettings() {
                 monCfg.scalingMode = 5;
                 m_config->SetMonitorConfig(mon->deviceName, monCfg);
             }
+        }
+    } else if (wasInSpanMode) {
+        // Exiting Span mode: transition all monitors that were spanned to the new scaling mode
+        for (size_t i = 0; i < m_monitorManager->GetMonitorCount(); i++) {
+            int idx = static_cast<int>(i);
+            auto* mon = m_monitorManager->GetMonitor(idx);
+            if (!mon) continue;
+
+            auto* existingCfg = m_config->GetMonitorConfig(mon->deviceName);
+            Configuration::MonitorConfig monCfg;
+            monCfg.enabled = true;
+            monCfg.scalingMode = m_scalingMode;
+
+            if (idx == m_selectedMonitorIndex) {
+                monCfg.wallpaperPath = wPath;
+            } else {
+                monCfg.wallpaperPath = (existingCfg && !existingCfg->wallpaperPath.empty()) ? existingCfg->wallpaperPath : wPath;
+            }
+            m_config->SetMonitorConfig(mon->deviceName, monCfg);
         }
     } else {
         Configuration::MonitorConfig config;
@@ -982,6 +1014,16 @@ void SettingsWindow::ApplySettings() {
         if (m_scalingMode == 5) {
             m_desktopManager->SetWallpaperSpan(wPath);
             Logger::Info("Spanned wallpaper applied across all monitors");
+        } else if (wasInSpanMode) {
+            // Apply new scaling mode to all monitors that were previously spanned
+            for (size_t i = 0; i < m_monitorManager->GetMonitorCount(); i++) {
+                int idx = static_cast<int>(i);
+                m_desktopManager->SetScalingMode(idx, m_scalingMode);
+            }
+            if (wcslen(wPath) > 0) {
+                m_desktopManager->SetWallpaper(m_selectedMonitorIndex, wPath);
+            }
+            Logger::Info("Exited span mode: all monitors synchronized to mode " + std::to_string(m_scalingMode));
         } else {
             if (wcslen(wPath) > 0) {
                 m_desktopManager->SetWallpaper(m_selectedMonitorIndex, wPath);

@@ -175,6 +175,21 @@ void DesktopManager::SetScalingMode(int monitorIndex, int mode) {
     if (monitorIndex >= 0 && monitorIndex < static_cast<int>(m_wallpaperWindows.size())) {
         m_wallpaperWindows[monitorIndex]->SetVirtualDesktopBounds(GetVirtualDesktopBounds());
         m_wallpaperWindows[monitorIndex]->SetScalingMode(mode);
+
+        // If any OTHER monitor is still in Span mode (5), it cannot span alone.
+        // Transition it out of Span mode so it doesn't display a cut-off half image.
+        for (size_t i = 0; i < m_wallpaperWindows.size(); i++) {
+            if (static_cast<int>(i) != monitorIndex) {
+                if (m_config) {
+                    const auto& mon = m_wallpaperWindows[i]->GetMonitor();
+                    auto* cfg = m_config->GetMonitorConfig(mon.deviceName);
+                    if (cfg && cfg->scalingMode == 5) {
+                        cfg->scalingMode = mode;
+                        m_wallpaperWindows[i]->SetScalingMode(mode);
+                    }
+                }
+            }
+        }
     }
 }
 
