@@ -510,7 +510,7 @@ void SettingsWindow::DrawUI() {
                 ImVec2(win_pos.x + 276, win_pos.y + 42),
                 IM_COL32(227, 46, 79, 35), 6.0f
             );
-            draw_list->AddText(ImVec2(win_pos.x + 227, win_pos.y + 23), COL_PRIMARY_HOVER, "v1.3.1");
+            draw_list->AddText(ImVec2(win_pos.x + 227, win_pos.y + 23), COL_PRIMARY_HOVER, "v1.3.2");
         } else {
             draw_list->AddCircleFilled(ImVec2(win_pos.x + 28, win_pos.y + header_height * 0.5f), 5.0f, COL_PRIMARY_RED);
             
@@ -524,7 +524,7 @@ void SettingsWindow::DrawUI() {
                 ImVec2(win_pos.x + 258, win_pos.y + 42),
                 IM_COL32(227, 46, 79, 35), 6.0f
             );
-            draw_list->AddText(ImVec2(win_pos.x + 209, win_pos.y + 23), COL_PRIMARY_HOVER, "v1.3.1");
+            draw_list->AddText(ImVec2(win_pos.x + 209, win_pos.y + 23), COL_PRIMARY_HOVER, "v1.3.2");
         }
 
         // Subtle header bottom line
@@ -926,19 +926,28 @@ void SettingsWindow::DrawUpdateWidget() {
     switch (state) {
         case UpdateState::Idle:
         case UpdateState::UpToDate: {
+            std::string ver = updater.GetCurrentVersion();
+            while (ver.rfind("v", 0) == 0 || ver.rfind("V", 0) == 0) {
+                ver.erase(0, 1);
+            }
+            ver = "v" + ver;
             ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_HINT);
-            ImGui::Text("v%s", updater.GetCurrentVersion().c_str());
+            ImGui::TextUnformatted(ver.c_str());
             ImGui::PopStyleColor();
 
             ImGui::SameLine(0, 10);
-            ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(0, 0, 0, 0));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(255, 255, 255, 15));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, IM_COL32(255, 255, 255, 25));
-            ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_MUTED);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
+            ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(35, 170, 85, 25));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(35, 170, 85, 55));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, IM_COL32(35, 170, 85, 85));
+            ImGui::PushStyleColor(ImGuiCol_Border, IM_COL32(45, 200, 100, 90));
+            ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(75, 225, 125, 255));
             if (ImGui::SmallButton("Check for update")) {
                 updater.CheckForUpdates(false);
             }
-            ImGui::PopStyleColor(4);
+            ImGui::PopStyleColor(5);
+            ImGui::PopStyleVar(2);
             break;
         }
 
