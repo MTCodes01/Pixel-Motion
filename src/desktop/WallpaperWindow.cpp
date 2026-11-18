@@ -91,19 +91,8 @@ bool WallpaperWindow::Create(HWND parentWorkerW, const MonitorInfo& monitor) {
     HWND actualParent = GetAncestor(m_hwnd, GA_PARENT);
     Logger::Info("Actual parent HWND: " + std::to_string(reinterpret_cast<uintptr_t>(actualParent)));
     
-    // Check if parentWorkerW contains SHELLDLL_DefView (desktop icons)
-    HWND defView = FindWindowEx(parentWorkerW, nullptr, L"SHELLDLL_DefView", nullptr);
-    if (defView != nullptr) {
-        // Ensure SHELLDLL_DefView has WS_CLIPSIBLINGS so sibling rendering never covers icons
-        LONG defStyle = GetWindowLong(defView, GWL_STYLE);
-        if (!(defStyle & WS_CLIPSIBLINGS)) {
-            SetWindowLong(defView, GWL_STYLE, defStyle | WS_CLIPSIBLINGS);
-        }
-        // Ensure desktop icons stay at the TOP of the Z-order
-        SetWindowPos(defView, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-    }
-
-    // Ensure parentWorkerW clips its children to avoid overdraw
+    // Ensure parentWorkerW is visible and clips its children
+    ShowWindow(parentWorkerW, SW_SHOW);
     LONG parentStyle = GetWindowLong(parentWorkerW, GWL_STYLE);
     if (!(parentStyle & WS_CLIPCHILDREN)) {
         SetWindowLong(parentWorkerW, GWL_STYLE, parentStyle | WS_CLIPCHILDREN);
@@ -112,6 +101,7 @@ bool WallpaperWindow::Create(HWND parentWorkerW, const MonitorInfo& monitor) {
     // Position relative to WorkerW and place at HWND_BOTTOM inside WorkerW
     SetWindowPos(m_hwnd, HWND_BOTTOM, relativeX, relativeY, monitor.width, monitor.height, 
                  SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    ShowWindow(m_hwnd, SW_SHOWNOACTIVATE);
     
     // Get window rect
     RECT rect;

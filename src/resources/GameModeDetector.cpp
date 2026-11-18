@@ -106,6 +106,12 @@ bool GameModeDetector::IsWindowFullscreen(HWND hwnd) {
         return false;
     }
 
+    // Ignore any window belonging to Windows Explorer (Desktop, Taskbar, Start Menu)
+    std::string procName = GetProcessName(hwnd);
+    if (_stricmp(procName.c_str(), "explorer.exe") == 0) {
+        return false;
+    }
+
     // Get window class name
     wchar_t className[256];
     if (GetClassName(hwnd, className, 256) == 0) {
@@ -116,6 +122,8 @@ bool GameModeDetector::IsWindowFullscreen(HWND hwnd) {
     if (wcscmp(className, L"WorkerW") == 0 || 
         wcscmp(className, L"Progman") == 0 || 
         wcscmp(className, L"Shell_TrayWnd") == 0 ||
+        wcscmp(className, L"SHELLDLL_DefView") == 0 ||
+        wcscmp(className, L"SysListView32") == 0 ||
         wcscmp(className, L"PixelMotionWallpaperWindow") == 0 ||
         wcscmp(className, L"PixelMotionSettings") == 0) {
         return false;
