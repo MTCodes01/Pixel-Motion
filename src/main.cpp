@@ -28,15 +28,18 @@ int WINAPI WinMain(
         SetCurrentDirectoryW(appDir.c_str());
     }
 
-    // Ensure single instance
+    // Ensure single instance (allow up to 5s for previous instance to exit during update/restart)
     HANDLE hMutex = CreateMutex(nullptr, TRUE, L"PixelMotion_SingleInstance");
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        MessageBox(nullptr,
-            L"Pixel Motion is already running.\nCheck the system tray.",
-            L"Pixel Motion",
-            MB_OK | MB_ICONINFORMATION);
-        if (hMutex) CloseHandle(hMutex);
-        return 0;
+        DWORD waitResult = WaitForSingleObject(hMutex, 5000);
+        if (waitResult != WAIT_OBJECT_0 && waitResult != WAIT_ABANDONED) {
+            MessageBox(nullptr,
+                L"Pixel Motion is already running.\nCheck the system tray.",
+                L"Pixel Motion",
+                MB_OK | MB_ICONINFORMATION);
+            if (hMutex) CloseHandle(hMutex);
+            return 0;
+        }
     }
 
     // Initialize logger

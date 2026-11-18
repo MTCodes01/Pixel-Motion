@@ -1,5 +1,5 @@
 #define MyAppName "Pixel Motion"
-#define MyAppVersion "1.3.4"
+#define MyAppVersion "1.3.5"
 #define MyAppPublisher "Pixel Motion Project"
 #define MyAppURL "https://github.com/MTCodes01/Pixel-Motion"
 #define MyAppExeName "PixelMotion.exe"
@@ -69,7 +69,8 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run"; ValueType: binary; ValueName: "PixelMotion"; ValueData: "02 00 00 00 00 00 00 00 00 00 00 00"; Flags: uninsdeletevalue; Tasks: autostart
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent; Check: not WizardSilent
+Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Flags: nowait runasoriginaluser; Check: WizardSilent
 
 [Code]
 var
@@ -100,7 +101,7 @@ end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 var
-  AppDir, ExePath: String;
+  AppDir: String;
   ResultCode: Integer;
 begin
   if CurStep = ssPostInstall then
@@ -108,15 +109,5 @@ begin
     AppDir := ExpandConstant('{app}');
     // Strip Zone.Identifier (Mark of the Web) so Windows Defender SmartScreen never flags installed binaries
     Exec('powershell.exe', '-NoProfile -NonInteractive -WindowStyle Hidden -Command "Get-ChildItem -Path ''' + AppDir + ''' -Recurse | Unblock-File -ErrorAction SilentlyContinue"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  end;
-
-  if CurStep = ssDone then
-  begin
-    // When performing an in-app silent update, automatically launch the updated application
-    if WizardSilent then
-    begin
-      ExePath := ExpandConstant('{app}\{#MyAppExeName}');
-      Exec(ExePath, '', '', SW_SHOWNORMAL, ewNoWait, ResultCode);
-    end;
   end;
 end;
