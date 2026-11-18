@@ -6,6 +6,7 @@
 #include "resources/ResourceManager.h"
 #include "ui/TrayIcon.h"
 #include "ui/SettingsWindow.h"
+#include "core/UpdateManager.h"
 
 #include <Windows.h>
 #include <objbase.h>
@@ -126,6 +127,9 @@ bool Application::InitializeSubsystems() {
     // Immediate working set trim after loading initial media
     SetProcessWorkingSetSize(GetCurrentProcess(), (SIZE_T)-1, (SIZE_T)-1);
     
+    // Check for updates asynchronously in the background on startup
+    UpdateManager::GetInstance().CheckForUpdates(true);
+
     Logger::Info("All subsystems connected successfully");
 
     return true;

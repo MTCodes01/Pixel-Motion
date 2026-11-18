@@ -52,13 +52,17 @@ $issContent = Get-Content (Join-Path $scriptDir "PixelMotion.iss") -Raw
 $versionMatch = [regex]::Match($issContent, '#define MyAppVersion "([^"]+)"')
 $appVersion = if ($versionMatch.Success) { $versionMatch.Groups[1].Value } else { "1.2.5" }
 
-$setupExe = Join-Path $binDir "PixelMotion-Setup-v$appVersion.exe"
+$setupExe = Join-Path $binDir "PixelMotion-Setup.exe"
 if (!(Test-Path $setupExe)) {
     throw "Setup executable was not generated at: $setupExe"
 }
 
 Write-Host "`n[4/5] Digitally signing installer: $(Split-Path -Leaf $setupExe)..." -ForegroundColor Cyan
 & $signtool sign /f $pfxPath /p $pfxPassword /fd SHA256 /tr "http://timestamp.digicert.com" /td SHA256 $setupExe
+
+# Also copy to versioned installer for backward compatibility
+$versionedExe = Join-Path $binDir "PixelMotion-Setup-v$appVersion.exe"
+Copy-Item $setupExe $versionedExe -Force
 
 # 5. Defender Scan verification
 Write-Host "`n[5/5] Running Windows Defender scan..." -ForegroundColor Cyan

@@ -4,6 +4,7 @@
 #include "core/Logger.h"
 #include "desktop/MonitorManager.h"
 #include "desktop/DesktopManager.h"
+#include "core/UpdateManager.h"
 
 #include <imgui.h>
 #include <imgui_impl_win32.h>
@@ -14,6 +15,24 @@
 
 // Forward declare message handler from imgui_impl_win32.cpp
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
+namespace {
+    // Elegant Dark Theme Color Palette
+    const ImU32 COL_BG_DARK         = IM_COL32(19, 21, 26, 255);    // Deep Charcoal Background
+    const ImU32 COL_SIDEBAR_BG      = IM_COL32(15, 17, 21, 255);    // Darker Sidebar
+    const ImU32 COL_HEADER_BG       = IM_COL32(23, 26, 32, 255);    // Header Bar
+    const ImU32 COL_CARD_BG         = IM_COL32(26, 29, 37, 255);    // Card Surface
+    const ImU32 COL_CARD_BORDER     = IM_COL32(42, 47, 60, 255);    // Card Border
+    
+    const ImU32 COL_PRIMARY_RED     = IM_COL32(227, 46, 79, 255);   // Crimson Accent
+    const ImU32 COL_PRIMARY_HOVER   = IM_COL32(250, 69, 102, 255);  // Hover Crimson
+    const ImU32 COL_PRIMARY_DARK    = IM_COL32(189, 29, 58, 255);   // Active Crimson
+    
+    const ImU32 COL_TEXT_WHITE      = IM_COL32(248, 250, 252, 255); // White Text
+    const ImU32 COL_TEXT_MUTED      = IM_COL32(148, 163, 184, 255); // Slate Gray Text
+    const ImU32 COL_TEXT_HINT       = IM_COL32(100, 116, 139, 255); // Muted Hint
+    const ImU32 COL_BORDER_DIVIDER  = IM_COL32(36, 41, 52, 255);    // Divider
+}
 
 namespace PixelMotion {
 
@@ -441,22 +460,6 @@ void SettingsWindow::Render() {
 }
 
 void SettingsWindow::DrawUI() {
-    // Elegant Dark Theme Color Palette
-    const ImU32 COL_BG_DARK         = IM_COL32(19, 21, 26, 255);    // Deep Charcoal Background
-    const ImU32 COL_SIDEBAR_BG      = IM_COL32(15, 17, 21, 255);    // Darker Sidebar
-    const ImU32 COL_HEADER_BG       = IM_COL32(23, 26, 32, 255);    // Header Bar
-    const ImU32 COL_CARD_BG         = IM_COL32(26, 29, 37, 255);    // Card Surface
-    const ImU32 COL_CARD_BORDER     = IM_COL32(42, 47, 60, 255);    // Card Border
-    
-    const ImU32 COL_PRIMARY_RED     = IM_COL32(227, 46, 79, 255);   // Crimson Accent
-    const ImU32 COL_PRIMARY_HOVER   = IM_COL32(250, 69, 102, 255);  // Hover Crimson
-    const ImU32 COL_PRIMARY_DARK    = IM_COL32(189, 29, 58, 255);   // Active Crimson
-    
-    const ImU32 COL_TEXT_WHITE      = IM_COL32(248, 250, 252, 255); // White Text
-    const ImU32 COL_TEXT_MUTED      = IM_COL32(148, 163, 184, 255); // Slate Gray Text
-    const ImU32 COL_TEXT_HINT       = IM_COL32(100, 116, 139, 255); // Muted Hint
-    const ImU32 COL_BORDER_DIVIDER  = IM_COL32(36, 41, 52, 255);    // Divider
-    
     // Setup Fullscreen ImGui Window
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->WorkPos);
@@ -507,7 +510,7 @@ void SettingsWindow::DrawUI() {
                 ImVec2(win_pos.x + 276, win_pos.y + 42),
                 IM_COL32(227, 46, 79, 35), 6.0f
             );
-            draw_list->AddText(ImVec2(win_pos.x + 227, win_pos.y + 23), COL_PRIMARY_HOVER, "v1.3.0");
+            draw_list->AddText(ImVec2(win_pos.x + 227, win_pos.y + 23), COL_PRIMARY_HOVER, "v1.3.1");
         } else {
             draw_list->AddCircleFilled(ImVec2(win_pos.x + 28, win_pos.y + header_height * 0.5f), 5.0f, COL_PRIMARY_RED);
             
@@ -521,7 +524,7 @@ void SettingsWindow::DrawUI() {
                 ImVec2(win_pos.x + 258, win_pos.y + 42),
                 IM_COL32(227, 46, 79, 35), 6.0f
             );
-            draw_list->AddText(ImVec2(win_pos.x + 209, win_pos.y + 23), COL_PRIMARY_HOVER, "v1.3.0");
+            draw_list->AddText(ImVec2(win_pos.x + 209, win_pos.y + 23), COL_PRIMARY_HOVER, "v1.3.1");
         }
 
         // Subtle header bottom line
@@ -618,6 +621,17 @@ void SettingsWindow::DrawUI() {
             }
         }
         ImGui::EndGroup();
+
+        // Sidebar Bottom Updates Widget (Minimal & User Friendly)
+        float update_y = win_pos.y + win_size.y - 48.0f;
+        draw_list->AddLine(
+            ImVec2(win_pos.x + 16, update_y),
+            ImVec2(win_pos.x + sidebar_width - 16, update_y),
+            COL_BORDER_DIVIDER, 1.0f
+        );
+
+        ImGui::SetCursorPos(ImVec2(16, update_y - win_pos.y + 12));
+        DrawUpdateWidget();
 
         // 4. Main Content Area Card & Dedicated Footer
         float content_x = sidebar_width + 24.0f;
@@ -849,7 +863,6 @@ void SettingsWindow::DrawUI() {
             
             ImGui::Spacing();
             ImGui::Spacing();
-
         } else {
             ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_MUTED);
             ImGui::TextUnformatted("Select a display from the sidebar to configure wallpaper settings.");
@@ -904,6 +917,111 @@ void SettingsWindow::DrawUI() {
 
     }
     ImGui::End();
+}
+
+void SettingsWindow::DrawUpdateWidget() {
+    auto& updater = UpdateManager::GetInstance();
+    UpdateState state = updater.GetState();
+
+    switch (state) {
+        case UpdateState::Idle:
+        case UpdateState::UpToDate: {
+            ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_HINT);
+            ImGui::Text("v%s", updater.GetCurrentVersion().c_str());
+            ImGui::PopStyleColor();
+
+            ImGui::SameLine(0, 10);
+            ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(0, 0, 0, 0));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(255, 255, 255, 15));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, IM_COL32(255, 255, 255, 25));
+            ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_MUTED);
+            if (ImGui::SmallButton("Check for update")) {
+                updater.CheckForUpdates(false);
+            }
+            ImGui::PopStyleColor(4);
+            break;
+        }
+
+        case UpdateState::Checking: {
+            ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_MUTED);
+            ImGui::TextUnformatted("Checking for update...");
+            ImGui::PopStyleColor();
+            break;
+        }
+
+        case UpdateState::UpdateAvailable: {
+            ImGui::PushStyleColor(ImGuiCol_Text, COL_PRIMARY_HOVER);
+            ImGui::TextUnformatted("Update available!");
+            ImGui::PopStyleColor();
+
+            ImGui::SameLine(0, 8);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
+            ImGui::PushStyleColor(ImGuiCol_Button, COL_PRIMARY_RED);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, COL_PRIMARY_HOVER);
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, COL_PRIMARY_DARK);
+            ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_WHITE);
+            if (ImGui::SmallButton("Update")) {
+                updater.StartDownload();
+            }
+            ImGui::PopStyleColor(4);
+            ImGui::PopStyleVar();
+            break;
+        }
+
+        case UpdateState::Downloading: {
+            float progress = updater.GetDownloadProgress();
+            char buf[32];
+            sprintf_s(buf, "Updating... %d%%", (int)(progress * 100.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, COL_PRIMARY_HOVER);
+            ImGui::TextUnformatted(buf);
+            ImGui::PopStyleColor();
+
+            ImGui::PushStyleColor(ImGuiCol_PlotHistogram, COL_PRIMARY_RED);
+            ImGui::PushStyleColor(ImGuiCol_FrameBg, IM_COL32(24, 28, 36, 255));
+            ImGui::ProgressBar(progress, ImVec2(188, 3), "");
+            ImGui::PopStyleColor(2);
+            break;
+        }
+
+        case UpdateState::ReadyToInstall: {
+            ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(75, 225, 125, 255));
+            ImGui::TextUnformatted("Update ready!");
+            ImGui::PopStyleColor();
+
+            ImGui::SameLine(0, 8);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
+            ImGui::PushStyleColor(ImGuiCol_Button, COL_PRIMARY_RED);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, COL_PRIMARY_HOVER);
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, COL_PRIMARY_DARK);
+            ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_WHITE);
+            if (ImGui::SmallButton("Restart")) {
+                updater.LaunchInstaller();
+            }
+            ImGui::PopStyleColor(4);
+            ImGui::PopStyleVar();
+            break;
+        }
+
+        case UpdateState::Error: {
+            ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(235, 85, 85, 255));
+            ImGui::TextUnformatted("Check failed.");
+            ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("%s", updater.GetErrorMessage().c_str());
+            }
+
+            ImGui::SameLine(0, 8);
+            ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(0, 0, 0, 0));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(255, 255, 255, 15));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, IM_COL32(255, 255, 255, 25));
+            ImGui::PushStyleColor(ImGuiCol_Text, COL_TEXT_MUTED);
+            if (ImGui::SmallButton("Retry")) {
+                updater.CheckForUpdates(false);
+            }
+            ImGui::PopStyleColor(4);
+            break;
+        }
+    }
 }
 
 void SettingsWindow::LoadSettingsForMonitor(int monitorIndex) {

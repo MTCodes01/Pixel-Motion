@@ -48,6 +48,7 @@ private:
     bool LoadLogo();
     
     void DrawUI(); // Draw ImGui widgets
+    void DrawUpdateWidget(); // Draw minimal update controls
     void ApplySettings(); // Save and apply changes
     void LoadSettingsForMonitor(int monitorIndex);
     

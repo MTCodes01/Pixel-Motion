@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(PixelMotion VERSION 1.3.0 LANGUAGES CXX)
+project(PixelMotion VERSION 1.3.1 LANGUAGES CXX)
 
 # C++20 standard required
 set(CMAKE_CXX_STANDARD 20)
@@ -48,6 +48,7 @@ set(WIN_LIBRARIES
     shell32.lib
     psapi.lib
     windowscodecs.lib
+    winhttp.lib
 )
 
 # Source files
@@ -56,6 +57,7 @@ set(CORE_SOURCES
     src/Application.cpp
     src/core/Configuration.cpp
     src/core/Logger.cpp
+    src/core/UpdateManager.cpp
 )
 
 set(DESKTOP_SOURCES
