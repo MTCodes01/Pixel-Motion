@@ -1,5 +1,5 @@
 #define MyAppName "Pixel Motion"
-#define MyAppVersion "1.3.2"
+#define MyAppVersion "1.3.3"
 #define MyAppPublisher "Pixel Motion Project"
 #define MyAppURL "https://github.com/MTCodes01/Pixel-Motion"
 #define MyAppExeName "PixelMotion.exe"
@@ -16,6 +16,10 @@ AppUpdatesURL={#MyAppURL}/releases
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
+; Preserve previous settings and directories across updates without prompting
+UsePreviousAppDir=yes
+UsePreviousTasks=yes
+UsePreviousPrivileges=yes
 ; PrivilegesRequired=lowest allows smooth install in user space without UAC prompts
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
@@ -68,9 +72,35 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Explorer\StartupA
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 
 [Code]
+var
+  IsUpgradeInstall: Boolean;
+
+function InitializeSetup(): Boolean;
+var
+  UninstallKey: String;
+begin
+  Result := True;
+  UninstallKey := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#SetupSetting("AppId")}_is1';
+  IsUpgradeInstall := RegKeyExists(HKCU, UninstallKey) or RegKeyExists(HKLM, UninstallKey);
+end;
+
+function ShouldSkipPage(PageID: Integer): Boolean;
+begin
+  // When upgrading an existing installation, automatically preserve options and skip wizard setup pages
+  if IsUpgradeInstall then
+  begin
+    if (PageID = wpSelectDir) or (PageID = wpSelectProgramGroup) or (PageID = wpSelectTasks) or (PageID = wpReady) then
+      Result := True
+    else
+      Result := False;
+  end
+  else
+    Result := False;
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var
-  AppDir: String;
+  AppDir, ExePath: String;
   ResultCode: Integer;
 begin
   if CurStep = ssPostInstall then
@@ -78,5 +108,15 @@ begin
     AppDir := ExpandConstant('{app}');
     // Strip Zone.Identifier (Mark of the Web) so Windows Defender SmartScreen never flags installed binaries
     Exec('powershell.exe', '-NoProfile -NonInteractive -WindowStyle Hidden -Command "Get-ChildItem -Path ''' + AppDir + ''' -Recurse | Unblock-File -ErrorAction SilentlyContinue"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  end;
+
+  if CurStep = ssDone then
+  begin
+    // When performing an in-app silent update, automatically launch the updated application
+    if WizardSilent then
+    begin
+      ExePath := ExpandConstant('{app}\{#MyAppExeName}');
+      Exec(ExePath, '', '', SW_SHOWNORMAL, ewNoWait, ResultCode);
+    end;
   end;
 end;

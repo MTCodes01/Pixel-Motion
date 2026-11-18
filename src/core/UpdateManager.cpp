@@ -26,7 +26,7 @@ UpdateManager::UpdateManager()
     , m_downloadProgress(0.0f)
     , m_downloadedBytes(0)
     , m_totalBytes(0)
-    , m_currentVersion("v1.3.2")
+    , m_currentVersion("v1.3.3")
     , m_isBackgroundCheck(false)
 {
 }
@@ -256,19 +256,22 @@ bool UpdateManager::LaunchInstaller() {
         return false;
     }
 
-    Logger::Info("Launching installer: " + path.string());
+    Logger::Info("Launching silent update installer: " + path.string());
+
+    // Run silently, preserve previous user options, suppress prompts, force-close old app, and relaunch
+    LPCWSTR parameters = L"/SILENT /SUPPRESSMSGBOXES /FORCECLOSEAPPLICATIONS /NORESTART";
 
     HINSTANCE hInst = ShellExecuteW(
         nullptr,
         L"open",
         path.c_str(),
-        nullptr,
+        parameters,
         nullptr,
         SW_SHOWNORMAL
     );
 
     if (reinterpret_cast<uintptr_t>(hInst) > 32) {
-        // Exit application cleanly so installer can overwrite files
+        // Exit application cleanly so installer can overwrite files and relaunch
         PostQuitMessage(0);
         return true;
     }
