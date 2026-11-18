@@ -51,9 +51,9 @@ bool WallpaperWindow::Create(HWND parentWorkerW, const MonitorInfo& monitor) {
     int relativeY = monitor.bounds.top - workerRect.top;
     Logger::Info("Relative position: (" + std::to_string(relativeX) + ", " + std::to_string(relativeY) + ")");
 
-    // Create window initially hidden as popup (without WS_VISIBLE so it never flashes over open apps)
+    // Create window initially hidden as popup (with WS_EX_TRANSPARENT so mouse clicks pass through to icons)
     m_hwnd = CreateWindowEx(
-        WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,   // Extended style - no taskbar button
+        WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TRANSPARENT,   // Extended style - transparent to input
         s_className,                            // Class name
         L"Pixel Motion Wallpaper",             // Window name
         WS_POPUP,                              // Popup style (initially hidden)
@@ -91,6 +91,24 @@ bool WallpaperWindow::Create(HWND parentWorkerW, const MonitorInfo& monitor) {
     HWND actualParent = GetAncestor(m_hwnd, GA_PARENT);
     Logger::Info("Actual parent HWND: " + std::to_string(reinterpret_cast<uintptr_t>(actualParent)));
     
+    // Check if parentWorkerW contains SHELLDLL_DefView (desktop icons)
+    HWND defView = FindWindowEx(parentWorkerW, nullptr, L"SHELLDLL_DefView", nullptr);
+    if (defView != nullptr) {
+        // Ensure SHELLDLL_DefView has WS_CLIPSIBLINGS so sibling rendering never covers icons
+        LONG defStyle = GetWindowLong(defView, GWL_STYLE);
+        if (!(defStyle & WS_CLIPSIBLINGS)) {
+            SetWindowLong(defView, GWL_STYLE, defStyle | WS_CLIPSIBLINGS);
+        }
+        // Ensure desktop icons stay at the TOP of the Z-order
+        SetWindowPos(defView, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    }
+
+    // Ensure parentWorkerW clips its children to avoid overdraw
+    LONG parentStyle = GetWindowLong(parentWorkerW, GWL_STYLE);
+    if (!(parentStyle & WS_CLIPCHILDREN)) {
+        SetWindowLong(parentWorkerW, GWL_STYLE, parentStyle | WS_CLIPCHILDREN);
+    }
+
     // Position relative to WorkerW and place at HWND_BOTTOM inside WorkerW
     SetWindowPos(m_hwnd, HWND_BOTTOM, relativeX, relativeY, monitor.width, monitor.height, 
                  SWP_NOACTIVATE | SWP_SHOWWINDOW);
@@ -259,6 +277,9 @@ LRESULT CALLBACK WallpaperWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LP
     }
 
     switch (msg) {
+        case WM_NCHITTEST:
+            return HTTRANSPARENT; // Let all clicks and mouse input pass straight to desktop icons
+
         case WM_PAINT: {
             PAINTSTRUCT ps;
             BeginPaint(hwnd, &ps);
@@ -268,6 +289,9 @@ LRESULT CALLBACK WallpaperWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LP
             EndPaint(hwnd, &ps);
             return 0;
         }
+
+        case WM_ERASEBKGND:
+            return 1; // Prevent background erasing/flicker
 
         case WM_DESTROY:
             return 0;

@@ -87,31 +87,12 @@ bool DesktopManager::FindWorkerW() {
             Logger::Warning("Progman not found on attempt " + std::to_string(attempt) + ", checking existing WorkerW windows...");
         }
 
-        // Step 3: Enumerate windows to find WorkerW behind SHELLDLL_DefView
+        // Step 3: Enumerate windows to find WorkerW or desktop window
         m_workerW = nullptr;
         EnumWindows(EnumWindowsProc, reinterpret_cast<LPARAM>(this));
 
-        // Fallback: If not found immediately after the icons window in Z-order,
-        // search for any top-level WorkerW that does NOT contain SHELLDLL_DefView
-        if (!m_workerW) {
-            EnumWindows([](HWND hwnd, LPARAM lParam) -> BOOL {
-                auto* manager = reinterpret_cast<DesktopManager*>(lParam);
-                wchar_t className[256] = {0};
-                if (GetClassNameW(hwnd, className, 256) > 0 && wcscmp(className, L"WorkerW") == 0) {
-                    HWND defView = FindWindowEx(hwnd, nullptr, L"SHELLDLL_DefView", nullptr);
-                    if (defView == nullptr) {
-                        manager->m_workerW = hwnd;
-                        Logger::Info("Found WorkerW (fallback without SHELLDLL_DefView), HWND: " +
-                                     std::to_string(reinterpret_cast<uintptr_t>(hwnd)));
-                        return FALSE; // Stop enumeration
-                    }
-                }
-                return TRUE;
-            }, reinterpret_cast<LPARAM>(this));
-        }
-
         if (m_workerW) {
-            Logger::Info("Found WorkerW window behind desktop icons on attempt " + std::to_string(attempt));
+            Logger::Info("Found WorkerW/desktop window on attempt " + std::to_string(attempt));
             ShowWindow(m_workerW, SW_SHOW);
             UpdateWindow(m_workerW);
             return true;
@@ -132,7 +113,7 @@ BOOL CALLBACK DesktopManager::EnumWindowsProc(HWND hwnd, LPARAM lParam) {
     // Look for the top-level window containing SHELLDLL_DefView (the desktop icons)
     HWND defView = FindWindowEx(hwnd, nullptr, L"SHELLDLL_DefView", nullptr);
     if (defView != nullptr) {
-        // The WorkerW behind the desktop icons is the WorkerW sibling directly behind this window in Z-order
+        // Preferred (Windows 10 / earlier Windows 11): WorkerW sibling spawned directly behind it
         HWND workerBehind = FindWindowEx(nullptr, hwnd, L"WorkerW", nullptr);
         if (workerBehind != nullptr) {
             manager->m_workerW = workerBehind;
@@ -140,6 +121,13 @@ BOOL CALLBACK DesktopManager::EnumWindowsProc(HWND hwnd, LPARAM lParam) {
                          std::to_string(reinterpret_cast<uintptr_t>(workerBehind)));
             return FALSE; // Stop enumeration
         }
+
+        // Robust fallback (Windows 11 24H2): attach directly to the desktop window hosting SHELLDLL_DefView
+        // and order wallpaper windows behind SHELLDLL_DefView via child Z-order
+        manager->m_workerW = hwnd;
+        Logger::Info("Found desktop window hosting SHELLDLL_DefView, HWND: " + 
+                     std::to_string(reinterpret_cast<uintptr_t>(hwnd)));
+        return FALSE; // Stop enumeration
     }
 
     return TRUE; // Continue enumeration

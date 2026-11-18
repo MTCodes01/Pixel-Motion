@@ -26,7 +26,7 @@ UpdateManager::UpdateManager()
     , m_downloadProgress(0.0f)
     , m_downloadedBytes(0)
     , m_totalBytes(0)
-    , m_currentVersion("v1.3.6")
+    , m_currentVersion("v1.3.7")
     , m_isBackgroundCheck(false)
 {
 }
