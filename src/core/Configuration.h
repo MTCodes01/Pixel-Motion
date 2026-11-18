@@ -21,7 +21,7 @@ public:
     struct MonitorConfig {
         std::wstring wallpaperPath;
         bool enabled = true;
-        int scalingMode = 0; // 0=Fill, 1=Fit, 2=Stretch, 3=Tile
+        int scalingMode = 0; // 0=Fill, 1=Fit, 2=Stretch, 3=Center, 4=Tile, 5=Span
     };
 
     struct Settings {

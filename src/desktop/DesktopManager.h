@@ -23,7 +23,10 @@ public:
     void Shutdown();
 
     bool SetWallpaper(int monitorIndex, const std::wstring& videoPath);
+    void SetWallpaperSpan(const std::wstring& videoPath);
+    void SetScalingMode(int monitorIndex, int mode);
     void RestoreWallpapers();
+    RECT GetVirtualDesktopBounds() const;
 
     void Update();
     void Render();

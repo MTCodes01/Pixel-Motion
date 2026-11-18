@@ -108,6 +108,7 @@ bool WallpaperWindow::Create(HWND parentWorkerW, const MonitorInfo& monitor) {
         Destroy();
         return false;
     }
+    m_renderer->SetMonitorBounds(monitor.bounds);
 
     std::string deviceName;
     int len = WideCharToMultiByte(CP_UTF8, 0, monitor.deviceName.c_str(), -1, nullptr, 0, nullptr, nullptr);
@@ -334,10 +335,22 @@ void WallpaperWindow::Render() {
     m_needsRepaint = false;
 }
 
+void WallpaperWindow::SetVirtualDesktopBounds(const RECT& bounds) {
+    if (m_renderer) {
+        m_renderer->SetVirtualDesktopBounds(bounds);
+    }
+}
+
 void WallpaperWindow::SetScalingMode(int mode) {
     if (m_renderer) {
         m_renderer->SetScalingMode(mode);
-        m_needsRepaint = true;
+        if (m_videoDecoder) {
+            m_renderer->Render();
+            m_renderer->Present();
+            m_needsRepaint = false;
+        } else {
+            m_needsRepaint = true;
+        }
     }
 }
 

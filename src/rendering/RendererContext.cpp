@@ -41,12 +41,14 @@ RendererContext::RendererContext()
     : m_hwnd(nullptr)
     , m_width(0)
     , m_height(0)
-    , m_scalingMode(2) // Default to Stretch
+    , m_scalingMode(0) // Default to Fill (Crop)
     , m_videoWidth(0)
     , m_videoHeight(0)
     , m_procWidth(0)
     , m_procHeight(0)
     , m_lastSourceTexture(nullptr)
+    , m_monitorBounds({})
+    , m_virtualBounds({})
     , m_initialized(false)
 {
 }
@@ -96,7 +98,7 @@ bool RendererContext::Initialize(HWND hwnd, int width, int height) {
         return false;
     }
 
-    // Create sampler state
+    // Create sampler state (Clamp for Fill, Fit, Stretch, Center, Span)
     D3D11_SAMPLER_DESC samplerDesc = {};
     samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
     samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
@@ -112,6 +114,14 @@ bool RendererContext::Initialize(HWND hwnd, int width, int height) {
         Logger::Error("Failed to create sampler state");
         return false;
     }
+
+    // Create wrap sampler state (for Tile mode)
+    D3D11_SAMPLER_DESC wrapDesc = samplerDesc;
+    wrapDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
+    wrapDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
+    wrapDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
+    DX11Device::GetInstance().GetDevice()->CreateSamplerState(
+        &wrapDesc, &m_samplerWrap);
 
     m_initialized = true;
     Logger::Info("Renderer context initialized successfully");
@@ -136,6 +146,7 @@ void RendererContext::Shutdown() {
     m_procHeight = 0;
 
     m_samplerState.Reset();
+    m_samplerWrap.Reset();
     m_videoSRV.Reset();
     m_videoTexture.Reset();
     m_vertexBuffer.Reset();
@@ -350,7 +361,9 @@ void RendererContext::Render() {
         context->VSSetShader(m_vertexShader.Get(), nullptr, 0);
         context->PSSetShader(m_pixelShader.Get(), nullptr, 0);
         context->PSSetShaderResources(0, 1, m_videoSRV.GetAddressOf());
-        context->PSSetSamplers(0, 1, m_samplerState.GetAddressOf());
+        
+        ID3D11SamplerState* sampler = (m_scalingMode == 4 && m_samplerWrap) ? m_samplerWrap.Get() : m_samplerState.Get();
+        context->PSSetSamplers(0, 1, &sampler);
 
         context->Draw(4, 0);
     }
@@ -608,17 +621,22 @@ ID3D11Device* RendererContext::GetDevice() {
     return DX11Device::GetInstance().GetDevice();
 }
 
+void RendererContext::SetVirtualDesktopBounds(const RECT& bounds) {
+    m_virtualBounds = bounds;
+    if (m_scalingMode == 5 && m_videoWidth > 0 && m_videoHeight > 0) {
+        UpdateVertexBuffer();
+    }
+}
+
 void RendererContext::SetScalingMode(int mode) {
-    if (m_scalingMode != mode) {
-        m_scalingMode = mode;
-        if (m_videoWidth > 0 && m_videoHeight > 0) {
-            UpdateVertexBuffer();
-        }
+    m_scalingMode = mode;
+    if (m_videoWidth > 0 && m_videoHeight > 0) {
+        UpdateVertexBuffer();
     }
 }
 
 void RendererContext::UpdateVertexBuffer() {
-    if (!m_initialized || m_videoWidth == 0 || m_videoHeight == 0) {
+    if (!m_initialized || m_videoWidth <= 0 || m_videoHeight <= 0 || m_width <= 0 || m_height <= 0) {
         return;
     }
 
@@ -627,60 +645,177 @@ void RendererContext::UpdateVertexBuffer() {
 
     float quadLeft = -1.0f, quadRight = 1.0f;
     float quadTop = 1.0f, quadBottom = -1.0f;
+    float uvLeft = 0.0f, uvRight = 1.0f;
+    float uvTop = 0.0f, uvBottom = 1.0f;
 
     switch (m_scalingMode) {
-        case 0: { // Fill - scale to cover, crop if needed
+        case 0: { // 0: Fill (Crop) - Fills the screen while maintaining aspect ratio; crops excess portions.
             if (videoAspect > monitorAspect) {
-                // Video is wider - fit height, crop sides
-                float scale = monitorAspect / videoAspect;
-                quadLeft = -1.0f / scale;
-                quadRight = 1.0f / scale;
-            } else {
-                // Video is taller - fit width, crop top/bottom
+                // Video is wider than monitor - fit height, crop sides
                 float scale = videoAspect / monitorAspect;
-                quadTop = 1.0f / scale;
-                quadBottom = -1.0f / scale;
+                quadLeft = -scale;
+                quadRight = scale;
+                quadTop = 1.0f;
+                quadBottom = -1.0f;
+            } else {
+                // Video is taller than monitor - fit width, crop top/bottom
+                float scale = monitorAspect / videoAspect;
+                quadLeft = -1.0f;
+                quadRight = 1.0f;
+                quadTop = scale;
+                quadBottom = -scale;
             }
             break;
         }
 
-        case 1: { // Fit - scale to fit inside, letterbox if needed
+        case 1: { // 1: Fit (Contain) - Displays the entire image without cropping; leaves empty space if needed.
             if (videoAspect > monitorAspect) {
-                // Video is wider - fit width, add bars top/bottom
-                float scale = videoAspect / monitorAspect;
-                quadTop = 1.0f * scale;
-                quadBottom = -1.0f * scale;
-            } else {
-                // Video is taller - fit height, add bars on sides
+                // Video is wider than monitor - fit width, letterbox top/bottom
                 float scale = monitorAspect / videoAspect;
-                quadLeft = -1.0f * scale;
-                quadRight = 1.0f * scale;
+                quadLeft = -1.0f;
+                quadRight = 1.0f;
+                quadTop = scale;
+                quadBottom = -scale;
+            } else {
+                // Video is taller than monitor - fit height, pillarbox sides
+                float scale = videoAspect / monitorAspect;
+                quadLeft = -scale;
+                quadRight = scale;
+                quadTop = 1.0f;
+                quadBottom = -1.0f;
             }
             break;
         }
 
-        case 2: { // Stretch - fill screen (ignore aspect ratio)
-            // Use default fullscreen quad
+        case 2: { // 2: Stretch - Stretches the image to match screen dimensions, ignoring aspect ratio.
+            quadLeft = -1.0f;
+            quadRight = 1.0f;
+            quadTop = 1.0f;
+            quadBottom = -1.0f;
+            uvLeft = 0.0f;
+            uvRight = 1.0f;
+            uvTop = 0.0f;
+            uvBottom = 1.0f;
             break;
         }
 
-        case 3: { // Center - original size, centered
+        case 3: { // 3: Center - Displays the image at its original resolution, centered on the screen.
             float scaleX = static_cast<float>(m_videoWidth) / static_cast<float>(m_width);
             float scaleY = static_cast<float>(m_videoHeight) / static_cast<float>(m_height);
             quadLeft = -scaleX;
             quadRight = scaleX;
             quadTop = scaleY;
             quadBottom = -scaleY;
+            uvLeft = 0.0f;
+            uvRight = 1.0f;
+            uvTop = 0.0f;
+            uvBottom = 1.0f;
             break;
         }
+
+        case 4: { // 4: Tile - Repeats the image to cover the entire screen.
+            quadLeft = -1.0f;
+            quadRight = 1.0f;
+            quadTop = 1.0f;
+            quadBottom = -1.0f;
+            uvLeft = 0.0f;
+            uvRight = static_cast<float>(m_width) / static_cast<float>(m_videoWidth);
+            uvTop = 0.0f;
+            uvBottom = static_cast<float>(m_height) / static_cast<float>(m_videoHeight);
+            break;
+        }
+
+        case 5: { // 5: Span - Spreads one wallpaper continuously across multiple monitors.
+            quadLeft = -1.0f;
+            quadRight = 1.0f;
+            quadTop = 1.0f;
+            quadBottom = -1.0f;
+
+            int virtLeft = m_virtualBounds.left;
+            int virtTop = m_virtualBounds.top;
+            int virtWidth = m_virtualBounds.right - m_virtualBounds.left;
+            int virtHeight = m_virtualBounds.bottom - m_virtualBounds.top;
+
+            // If virtual desktop metrics not set, query system metrics
+            if (virtWidth <= 0 || virtHeight <= 0) {
+                virtLeft = GetSystemMetrics(SM_XVIRTUALSCREEN);
+                virtTop = GetSystemMetrics(SM_YVIRTUALSCREEN);
+                virtWidth = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+                virtHeight = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+            }
+
+            if (virtWidth <= 0 || virtHeight <= 0) {
+                // Fallback to single monitor Fill if virtual metrics unavailable
+                if (videoAspect > monitorAspect) {
+                    float scale = videoAspect / monitorAspect;
+                    quadLeft = -scale;
+                    quadRight = scale;
+                } else {
+                    float scale = monitorAspect / videoAspect;
+                    quadTop = scale;
+                    quadBottom = -scale;
+                }
+                break;
+            }
+
+            float virtAspect = static_cast<float>(virtWidth) / static_cast<float>(virtHeight);
+
+            // Compute UV bounds across virtual canvas (Fill behavior across the multi-monitor span)
+            float uMin = 0.0f, uMax = 1.0f;
+            float vMin = 0.0f, vMax = 1.0f;
+
+            if (videoAspect > virtAspect) {
+                // Media is wider than the combined virtual canvas - fit height, crop excess sides
+                float crop = (1.0f - (virtAspect / videoAspect)) * 0.5f;
+                uMin = crop;
+                uMax = 1.0f - crop;
+            } else {
+                // Media is taller than the combined virtual canvas - fit width, crop excess top/bottom
+                float crop = (1.0f - (videoAspect / virtAspect)) * 0.5f;
+                vMin = crop;
+                vMax = 1.0f - crop;
+            }
+
+            // Determine monitor rect in virtual desktop space
+            int monLeft = m_monitorBounds.left;
+            int monRight = m_monitorBounds.right;
+            int monTop = m_monitorBounds.top;
+            int monBottom = m_monitorBounds.bottom;
+
+            if (monRight <= monLeft || monBottom <= monTop) {
+                monLeft = virtLeft;
+                monRight = virtLeft + m_width;
+                monTop = virtTop;
+                monBottom = virtTop + m_height;
+            }
+
+            float tLeft = static_cast<float>(monLeft - virtLeft) / static_cast<float>(virtWidth);
+            float tRight = static_cast<float>(monRight - virtLeft) / static_cast<float>(virtWidth);
+            float tTop = static_cast<float>(monTop - virtTop) / static_cast<float>(virtHeight);
+            float tBottom = static_cast<float>(monBottom - virtTop) / static_cast<float>(virtHeight);
+
+            tLeft = std::clamp(tLeft, 0.0f, 1.0f);
+            tRight = std::clamp(tRight, 0.0f, 1.0f);
+            tTop = std::clamp(tTop, 0.0f, 1.0f);
+            tBottom = std::clamp(tBottom, 0.0f, 1.0f);
+
+            uvLeft = uMin + tLeft * (uMax - uMin);
+            uvRight = uMin + tRight * (uMax - uMin);
+            uvTop = vMin + tTop * (vMax - vMin);
+            uvBottom = vMin + tBottom * (vMax - vMin);
+            break;
+        }
+
+        default:
+            break;
     }
 
-    // Create vertices with calculated positions
+    // Create vertices with calculated positions and UV coordinates
     Vertex vertices[] = {
-        { { quadLeft,  quadTop, 0.0f }, { 0.0f, 0.0f } },     // Top-left
-        { { quadRight, quadTop, 0.0f }, { 1.0f, 0.0f } },     // Top-right
-        { { quadLeft,  quadBottom, 0.0f }, { 0.0f, 1.0f } },  // Bottom-left
-        { { quadRight, quadBottom, 0.0f }, { 1.0f, 1.0f } },  // Bottom-right
+        { { quadLeft,  quadTop, 0.0f },    { uvLeft,  uvTop } },     // Top-left
+        { { quadRight, quadTop, 0.0f },    { uvRight, uvTop } },     // Top-right
+        { { quadLeft,  quadBottom, 0.0f }, { uvLeft,  uvBottom } },  // Bottom-left
+        { { quadRight, quadBottom, 0.0f }, { uvRight, uvBottom } },  // Bottom-right
     };
 
     // Update vertex buffer

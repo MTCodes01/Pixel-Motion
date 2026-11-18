@@ -507,7 +507,7 @@ void SettingsWindow::DrawUI() {
                 ImVec2(win_pos.x + 276, win_pos.y + 42),
                 IM_COL32(227, 46, 79, 35), 6.0f
             );
-            draw_list->AddText(ImVec2(win_pos.x + 227, win_pos.y + 23), COL_PRIMARY_HOVER, "v1.2.7");
+            draw_list->AddText(ImVec2(win_pos.x + 227, win_pos.y + 23), COL_PRIMARY_HOVER, "v1.2.8");
         } else {
             draw_list->AddCircleFilled(ImVec2(win_pos.x + 28, win_pos.y + header_height * 0.5f), 5.0f, COL_PRIMARY_RED);
             
@@ -521,7 +521,7 @@ void SettingsWindow::DrawUI() {
                 ImVec2(win_pos.x + 258, win_pos.y + 42),
                 IM_COL32(227, 46, 79, 35), 6.0f
             );
-            draw_list->AddText(ImVec2(win_pos.x + 209, win_pos.y + 23), COL_PRIMARY_HOVER, "v1.2.7");
+            draw_list->AddText(ImVec2(win_pos.x + 209, win_pos.y + 23), COL_PRIMARY_HOVER, "v1.2.8");
         }
 
         // Subtle header bottom line
@@ -709,10 +709,21 @@ void SettingsWindow::DrawUI() {
             ImGui::Spacing();
 
             const char* scalingItems[] = { 
-                "Fill (Crop to cover entire screen)", 
-                "Fit (Letterbox with aspect ratio)", 
-                "Stretch (Fill screen ignoring aspect ratio)", 
-                "Center (Original pixel size, centered)" 
+                "Fill (Crop to cover screen)", 
+                "Fit (Contain entire image)", 
+                "Stretch (Match screen dimensions)", 
+                "Center (Original resolution)",
+                "Tile (Repeat across screen)",
+                "Span (Spread across monitors)"
+            };
+
+            const char* scalingDescriptions[] = {
+                "Fills the screen while maintaining aspect ratio; crops excess portions.",
+                "Displays the entire image without cropping; leaves empty space if needed.",
+                "Stretches the image to match screen dimensions, ignoring aspect ratio.",
+                "Displays the image at its original resolution, centered on the screen.",
+                "Repeats the image to cover the entire screen.",
+                "Spreads one wallpaper continuously across multiple monitors."
             };
             
             ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
@@ -723,6 +734,14 @@ void SettingsWindow::DrawUI() {
             ImGui::Combo("##Scaling", &m_scalingMode, scalingItems, IM_ARRAYSIZE(scalingItems));
             ImGui::PopStyleColor(3);
             ImGui::PopStyleVar();
+
+            // Scaling mode explanation helper text
+            if (m_scalingMode >= 0 && m_scalingMode < static_cast<int>(IM_ARRAYSIZE(scalingDescriptions))) {
+                ImGui::Spacing();
+                ImGui::PushStyleColor(ImGuiCol_Text, COL_PRIMARY_HOVER);
+                ImGui::TextWrapped("%s", scalingDescriptions[m_scalingMode]);
+                ImGui::PopStyleColor();
+            }
 
             ImGui::Spacing();
             ImGui::Spacing();
@@ -925,13 +944,25 @@ void SettingsWindow::ApplySettings() {
     MultiByteToWideChar(CP_UTF8, 0, m_wallpaperPathBuffer, -1, wPath, MAX_PATH);
     
     // Create monitor config
-    Configuration::MonitorConfig config;
-    config.wallpaperPath = wPath;
-    config.enabled = true;
-    config.scalingMode = m_scalingMode;
-    
-    // Save to configuration
-    m_config->SetMonitorConfig(monitor->deviceName, config);
+    if (m_scalingMode == 5) {
+        // Span mode: apply across ALL monitors continuously
+        for (size_t i = 0; i < m_monitorManager->GetMonitorCount(); i++) {
+            auto* mon = m_monitorManager->GetMonitor(static_cast<int>(i));
+            if (mon) {
+                Configuration::MonitorConfig monCfg;
+                monCfg.wallpaperPath = wPath;
+                monCfg.enabled = true;
+                monCfg.scalingMode = 5;
+                m_config->SetMonitorConfig(mon->deviceName, monCfg);
+            }
+        }
+    } else {
+        Configuration::MonitorConfig config;
+        config.wallpaperPath = wPath;
+        config.enabled = true;
+        config.scalingMode = m_scalingMode;
+        m_config->SetMonitorConfig(monitor->deviceName, config);
+    }
     
     // Save global settings
     m_config->SetGameModeEnabled(m_fullscreenPause);
@@ -947,9 +978,19 @@ void SettingsWindow::ApplySettings() {
     }
     
     // Apply to desktop manager
-    if (m_desktopManager && wcslen(wPath) > 0) {
-        m_desktopManager->SetWallpaper(m_selectedMonitorIndex, wPath);
-        Logger::Info("Wallpaper applied to monitor");
+    if (m_desktopManager) {
+        if (m_scalingMode == 5) {
+            m_desktopManager->SetWallpaperSpan(wPath);
+            Logger::Info("Spanned wallpaper applied across all monitors");
+        } else {
+            if (wcslen(wPath) > 0) {
+                m_desktopManager->SetWallpaper(m_selectedMonitorIndex, wPath);
+                Logger::Info("Wallpaper applied to monitor");
+            } else {
+                m_desktopManager->SetScalingMode(m_selectedMonitorIndex, m_scalingMode);
+                Logger::Info("Scaling mode applied to monitor");
+            }
+        }
     }
 
     // Reclaim working set memory after applying changes

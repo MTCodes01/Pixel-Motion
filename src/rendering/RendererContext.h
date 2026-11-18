@@ -31,7 +31,9 @@ public:
 
     void SetVideoTexture(ID3D11Texture2D* texture, int arrayIndex = 0, int contentWidth = 0, int contentHeight = 0);
     void ClearVideoResources();
-    void SetScalingMode(int mode); // 0=Fill, 1=Fit, 2=Stretch, 3=Center
+    void SetScalingMode(int mode); // 0=Fill, 1=Fit, 2=Stretch, 3=Center, 4=Tile, 5=Span
+    void SetMonitorBounds(const RECT& bounds) { m_monitorBounds = bounds; }
+    void SetVirtualDesktopBounds(const RECT& bounds);
     ID3D11Device* GetDevice();
 
 private:
@@ -52,7 +54,11 @@ private:
     ComPtr<ID3D11PixelShader> m_pixelShader;
     ComPtr<ID3D11InputLayout> m_inputLayout;
     ComPtr<ID3D11Buffer> m_vertexBuffer;
-    ComPtr<ID3D11SamplerState> m_samplerState;
+    ComPtr<ID3D11SamplerState> m_samplerState; // Clamp sampler
+    ComPtr<ID3D11SamplerState> m_samplerWrap;  // Wrap sampler for Tile mode
+
+    RECT m_monitorBounds;
+    RECT m_virtualBounds;
 
     ComPtr<ID3D11Texture2D> m_videoTexture;
     ComPtr<ID3D11ShaderResourceView> m_videoSRV;

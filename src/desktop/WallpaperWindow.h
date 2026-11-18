@@ -29,7 +29,8 @@ public:
     void Update();
     void Render();
 
-    void SetScalingMode(int mode); // 0=Fill, 1=Fit, 2=Stretch, 3=Center
+    void SetScalingMode(int mode); // 0=Fill, 1=Fit, 2=Stretch, 3=Center, 4=Tile, 5=Span
+    void SetVirtualDesktopBounds(const RECT& bounds);
 
     HWND GetHandle() const { return m_hwnd; }
     const MonitorInfo& GetMonitor() const { return m_monitor; }

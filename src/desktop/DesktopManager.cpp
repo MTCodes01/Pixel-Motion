@@ -146,6 +146,51 @@ void DesktopManager::DestroyWallpaperWindows() {
     m_wallpaperWindows.clear();
 }
 
+RECT DesktopManager::GetVirtualDesktopBounds() const {
+    RECT vRect = { 0, 0, 0, 0 };
+    if (!m_wallpaperWindows.empty()) {
+        vRect = m_wallpaperWindows[0]->GetMonitor().bounds;
+        for (size_t i = 1; i < m_wallpaperWindows.size(); i++) {
+            const RECT& b = m_wallpaperWindows[i]->GetMonitor().bounds;
+            vRect.left = std::min(vRect.left, b.left);
+            vRect.top = std::min(vRect.top, b.top);
+            vRect.right = std::max(vRect.right, b.right);
+            vRect.bottom = std::max(vRect.bottom, b.bottom);
+        }
+    } else {
+        vRect.left = GetSystemMetrics(SM_XVIRTUALSCREEN);
+        vRect.top = GetSystemMetrics(SM_YVIRTUALSCREEN);
+        vRect.right = vRect.left + GetSystemMetrics(SM_CXVIRTUALSCREEN);
+        vRect.bottom = vRect.top + GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    }
+    return vRect;
+}
+
+void DesktopManager::SetScalingMode(int monitorIndex, int mode) {
+    if (mode == 5) { // Span
+        SetWallpaperSpan(L"");
+        return;
+    }
+
+    if (monitorIndex >= 0 && monitorIndex < static_cast<int>(m_wallpaperWindows.size())) {
+        m_wallpaperWindows[monitorIndex]->SetVirtualDesktopBounds(GetVirtualDesktopBounds());
+        m_wallpaperWindows[monitorIndex]->SetScalingMode(mode);
+    }
+}
+
+void DesktopManager::SetWallpaperSpan(const std::wstring& videoPath) {
+    Logger::Info("Applying spanned wallpaper across all monitors");
+    RECT vRect = GetVirtualDesktopBounds();
+    for (auto& window : m_wallpaperWindows) {
+        window->SetVirtualDesktopBounds(vRect);
+        window->SetScalingMode(5);
+        if (!videoPath.empty()) {
+            window->LoadVideo(videoPath);
+        }
+    }
+    SetProcessWorkingSetSize(GetCurrentProcess(), (SIZE_T)-1, (SIZE_T)-1);
+}
+
 bool DesktopManager::SetWallpaper(int monitorIndex, const std::wstring& videoPath) {
     if (monitorIndex < 0 || monitorIndex >= static_cast<int>(m_wallpaperWindows.size())) {
         Logger::Error("Invalid monitor index: " + std::to_string(monitorIndex));
@@ -163,15 +208,23 @@ bool DesktopManager::SetWallpaper(int monitorIndex, const std::wstring& videoPat
     auto* window = m_wallpaperWindows[monitorIndex].get();
     
     // Get scaling mode from configuration
+    int scalingMode = 0;
     if (m_config) {
         const auto& monitor = window->GetMonitor();
         auto* monitorConfig = m_config->GetMonitorConfig(monitor.deviceName);
         if (monitorConfig) {
-            int scalingMode = monitorConfig->scalingMode;
-            window->SetScalingMode(scalingMode);
-            Logger::Info("Applied scaling mode: " + std::to_string(scalingMode));
+            scalingMode = monitorConfig->scalingMode;
         }
     }
+
+    if (scalingMode == 5) {
+        SetWallpaperSpan(videoPath);
+        return true;
+    }
+
+    window->SetVirtualDesktopBounds(GetVirtualDesktopBounds());
+    window->SetScalingMode(scalingMode);
+    Logger::Info("Applied scaling mode: " + std::to_string(scalingMode));
 
     bool result = window->LoadVideo(videoPath);
     if (result) {
@@ -184,21 +237,26 @@ void DesktopManager::RestoreWallpapers() {
     if (!m_config) return;
 
     Logger::Info("Restoring saved wallpapers...");
+    RECT vRect = GetVirtualDesktopBounds();
 
     for (size_t i = 0; i < m_wallpaperWindows.size(); i++) {
         auto* window = m_wallpaperWindows[i].get();
+        window->SetVirtualDesktopBounds(vRect);
         const auto& monitor = window->GetMonitor();
         
         auto* monitorConfig = m_config->GetMonitorConfig(monitor.deviceName);
         if (monitorConfig) {
-            // Apply scaling mode regardless of wallpaper (in case they want to set it before invalid wallpaper)
             window->SetScalingMode(monitorConfig->scalingMode);
 
             // Restore wallpaper if enabled and path exists
             if (monitorConfig->enabled && !monitorConfig->wallpaperPath.empty()) {
                 if (std::filesystem::exists(monitorConfig->wallpaperPath)) {
-                    // Use SetWallpaper to handle logging and any future logic
-                    SetWallpaper(static_cast<int>(i), monitorConfig->wallpaperPath);
+                    if (monitorConfig->scalingMode == 5) {
+                        SetWallpaperSpan(monitorConfig->wallpaperPath);
+                        break; // Spanned wallpaper applies to all monitors
+                    } else {
+                        SetWallpaper(static_cast<int>(i), monitorConfig->wallpaperPath);
+                    }
                 } else {
                     std::string pathUtf8;
                     int pLen = WideCharToMultiByte(CP_UTF8, 0, monitorConfig->wallpaperPath.c_str(), -1, nullptr, 0, nullptr, nullptr);
