@@ -70,6 +70,10 @@ bool WallpaperWindow::Create(HWND parentWorkerW, const MonitorInfo& monitor) {
 
     Logger::Info("Wallpaper window created, HWND: " + std::to_string(reinterpret_cast<uintptr_t>(m_hwnd)));
 
+    // Change style to WS_CHILD so it is a true child of WorkerW and stays behind desktop icons
+    LONG style = GetWindowLong(m_hwnd, GWL_STYLE);
+    SetWindowLong(m_hwnd, GWL_STYLE, (style & ~WS_POPUP) | WS_CHILD);
+
     // Now attach to WorkerW using SetParent
     HWND oldParent = SetParent(m_hwnd, parentWorkerW);
     if (oldParent == nullptr && GetLastError() != 0) {
@@ -79,7 +83,7 @@ bool WallpaperWindow::Create(HWND parentWorkerW, const MonitorInfo& monitor) {
     }
     
     // Verify parent
-    HWND actualParent = GetParent(m_hwnd);
+    HWND actualParent = GetAncestor(m_hwnd, GA_PARENT);
     Logger::Info("Actual parent HWND: " + std::to_string(reinterpret_cast<uintptr_t>(actualParent)));
     
     // Position relative to WorkerW after SetParent

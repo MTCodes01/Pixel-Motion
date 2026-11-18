@@ -99,16 +99,25 @@ bool GameModeDetector::IsWindowFullscreen(HWND hwnd) {
         return false;
     }
 
+    // Ignore any window belonging to our own application process
+    DWORD windowPid = 0;
+    GetWindowThreadProcessId(hwnd, &windowPid);
+    if (windowPid == GetCurrentProcessId()) {
+        return false;
+    }
+
     // Get window class name
     wchar_t className[256];
     if (GetClassName(hwnd, className, 256) == 0) {
         return false;
     }
 
-    // Ignore Desktop and Taskbar
+    // Ignore Desktop, Taskbar, and our wallpaper windows
     if (wcscmp(className, L"WorkerW") == 0 || 
         wcscmp(className, L"Progman") == 0 || 
-        wcscmp(className, L"Shell_TrayWnd") == 0) {
+        wcscmp(className, L"Shell_TrayWnd") == 0 ||
+        wcscmp(className, L"PixelMotionWallpaperWindow") == 0 ||
+        wcscmp(className, L"PixelMotionSettings") == 0) {
         return false;
     }
 

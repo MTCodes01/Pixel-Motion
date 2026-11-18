@@ -2,6 +2,7 @@
 #include "core/Logger.h"
 
 #include <Windows.h>
+#include <filesystem>
 
 using namespace PixelMotion;
 
@@ -14,9 +15,18 @@ int WINAPI WinMain(
     _In_ LPSTR lpCmdLine,
     _In_ int nShowCmd)
 {
+    UNREFERENCED_PARAMETER(hInstance);
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
     UNREFERENCED_PARAMETER(nShowCmd);
+
+    // Set working directory to the application executable directory
+    // (Crucial when launched at Windows startup from Registry Run key, where CWD defaults to C:\Windows\System32)
+    wchar_t exePath[MAX_PATH];
+    if (GetModuleFileName(nullptr, exePath, MAX_PATH) > 0) {
+        std::filesystem::path appDir = std::filesystem::path(exePath).parent_path();
+        SetCurrentDirectoryW(appDir.c_str());
+    }
 
     // Ensure single instance
     HANDLE hMutex = CreateMutex(nullptr, TRUE, L"PixelMotion_SingleInstance");

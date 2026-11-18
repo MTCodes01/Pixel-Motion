@@ -193,10 +193,11 @@ void Configuration::SetProcessBlocklist(const std::vector<std::string>& list) {
 
 void Configuration::SetStartupRegistry(bool enable) {
     HKEY hKey;
-    const wchar_t* keyPath = L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+    const wchar_t* runKeyPath = L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+    const wchar_t* startupApprovedPath = L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\Run";
     const wchar_t* valueName = L"PixelMotion";
 
-    if (RegOpenKeyEx(HKEY_CURRENT_USER, keyPath, 0, KEY_WRITE, &hKey) == ERROR_SUCCESS) {
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, runKeyPath, 0, KEY_WRITE, &hKey) == ERROR_SUCCESS) {
         if (enable) {
             wchar_t exePath[MAX_PATH];
             GetModuleFileName(nullptr, exePath, MAX_PATH);
@@ -205,12 +206,34 @@ void Configuration::SetStartupRegistry(bool enable) {
             RegSetValueEx(hKey, valueName, 0, REG_SZ, 
                           reinterpret_cast<const BYTE*>(cmd.c_str()), 
                           static_cast<DWORD>((cmd.length() + 1) * sizeof(wchar_t)));
+            char utf8Path[MAX_PATH * 2] = { 0 };
+            WideCharToMultiByte(CP_UTF8, 0, cmd.c_str(), -1, utf8Path, sizeof(utf8Path), nullptr, nullptr);
+            Logger::Info("Startup registry Run key set to: " + std::string(utf8Path));
         } else {
             RegDeleteValue(hKey, valueName);
+            Logger::Info("Startup registry Run key removed");
         }
         RegCloseKey(hKey);
     } else {
         Logger::Error("Failed to open registry key for startup configuration");
+    }
+
+    // Windows 10/11 Task Manager StartupApproved coordination:
+    // If StartupApproved\Run contains a disabled flag (byte 0 == 0x03), Windows ignores the Run key!
+    // We explicitly set byte 0 to 0x02 (Enabled) or 0x03 (Disabled) so Task Manager and Windows stay in sync.
+    HKEY hApprovedKey;
+    if (RegCreateKeyEx(HKEY_CURRENT_USER, startupApprovedPath, 0, nullptr, 
+                       REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hApprovedKey, nullptr) == ERROR_SUCCESS) {
+        if (enable) {
+            BYTE enabledData[12] = { 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+            RegSetValueEx(hApprovedKey, valueName, 0, REG_BINARY, enabledData, sizeof(enabledData));
+            Logger::Info("StartupApproved\\Run synchronized: Enabled (0x02)");
+        } else {
+            BYTE disabledData[12] = { 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+            RegSetValueEx(hApprovedKey, valueName, 0, REG_BINARY, disabledData, sizeof(disabledData));
+            Logger::Info("StartupApproved\\Run synchronized: Disabled (0x03)");
+        }
+        RegCloseKey(hApprovedKey);
     }
 }
 

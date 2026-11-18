@@ -62,33 +62,41 @@ void DesktopManager::Shutdown() {
 }
 
 bool DesktopManager::FindWorkerW() {
-    // Step 1: Find Progman window (or fallback to GetShellWindow)
-    m_progman = FindWindow(L"Progman", nullptr);
-    if (!m_progman) {
-        m_progman = GetShellWindow();
+    // Retry up to 15 attempts (500ms delay) to handle Windows boot/logon race condition where Explorer is still initializing
+    const int maxAttempts = 15;
+    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+        // Step 1: Find Progman window (or fallback to GetShellWindow)
+        m_progman = FindWindow(L"Progman", nullptr);
+        if (!m_progman) {
+            m_progman = GetShellWindow();
+        }
+
+        if (m_progman) {
+            Logger::Info("Found Progman/Shell window on attempt " + std::to_string(attempt));
+
+            // Step 2: Send message to spawn WorkerW
+            SendMessageTimeout(m_progman, WM_SPAWN_WORKER, 0xD, 0x1,
+                SMTO_NORMAL, 1000, nullptr);
+        } else {
+            Logger::Warning("Progman not found on attempt " + std::to_string(attempt) + ", checking existing WorkerW windows...");
+        }
+
+        // Step 3: Enumerate windows to find WorkerW behind SHELLDLL_DefView
+        m_workerW = nullptr;
+        EnumWindows(EnumWindowsProc, reinterpret_cast<LPARAM>(this));
+
+        if (m_workerW) {
+            Logger::Info("Found WorkerW window on attempt " + std::to_string(attempt));
+            return true;
+        }
+
+        if (attempt < maxAttempts) {
+            Sleep(500); // Wait 500ms for Explorer to finish initializing
+        }
     }
 
-    if (m_progman) {
-        Logger::Info("Found Progman/Shell window");
-
-        // Step 2: Send message to spawn WorkerW
-        SendMessageTimeout(m_progman, WM_SPAWN_WORKER, 0xD, 0x1,
-            SMTO_NORMAL, 1000, nullptr);
-    } else {
-        Logger::Warning("Progman not found via FindWindow/GetShellWindow, checking existing WorkerW windows...");
-    }
-
-    // Step 3: Enumerate windows to find WorkerW behind SHELLDLL_DefView
-    m_workerW = nullptr;
-    EnumWindows(EnumWindowsProc, reinterpret_cast<LPARAM>(this));
-
-    if (!m_workerW) {
-        Logger::Error("Failed to find WorkerW window");
-        return false;
-    }
-
-    Logger::Info("Found WorkerW window");
-    return true;
+    Logger::Error("Failed to find WorkerW window after " + std::to_string(maxAttempts) + " attempts");
+    return false;
 }
 
 BOOL CALLBACK DesktopManager::EnumWindowsProc(HWND hwnd, LPARAM lParam) {
